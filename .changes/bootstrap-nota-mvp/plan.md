@@ -2,7 +2,7 @@
 
 ## Files
 
-- `contract/openapi.yaml`、`contract/baseline/openapi.yaml`：认证、threads、messages、items、usage 与统一错误体。
+- `contract/openapi.yaml`、`contract/baseline/openapi.yaml`：认证、threads、messages、items（含按钮直建）、usage 与统一错误体。
 - `server/src/`：Fastify 入口、配置、Drizzle schema/migrations、auth / threads / messages / items / usage 模块。
 - `server/src/agent/`：pi-agent-core + pi-ai、工具定义、finish、staging、事件持久化。
 - `server/test/`：鉴权、额度并发/幂等、thread 归属、工具参数、finish 回滚、契约测试。

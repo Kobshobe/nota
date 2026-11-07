@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
@@ -170,6 +170,11 @@ paths:
           schema:
             type: string
             enum: [open, done]
+        - name: threadId
+          in: query
+          required: false
+          schema:
+            type: string
         - name: limit
           in: query
           required: false
@@ -187,6 +192,29 @@ paths:
                 $ref: '#/components/schemas/ItemsResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [items]
+      operationId: createItem
+      summary: 直接创建事项（按钮确认候选待办；不扣额度）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateItemRequest'
+      responses:
+        '201':
+          description: 已创建的事项
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Item'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/items/{itemId}:
     patch:
       tags: [items]
@@ -424,6 +452,9 @@ components:
       type: object
       additionalProperties: false
       properties:
+        title:
+          type: string
+          maxLength: 100
         summary:
           type: string
         keyPoints:
@@ -522,6 +553,23 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Item'
+    CreateItemRequest:
+      type: object
+      additionalProperties: false
+      required: [threadId, kind, title]
+      properties:
+        threadId:
+          type: string
+        kind:
+          type: string
+          enum: [reminder, todo]
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        dueAt:
+          type: string
+          format: date-time
     UpdateItemRequest:
       type: object
       additionalProperties: false

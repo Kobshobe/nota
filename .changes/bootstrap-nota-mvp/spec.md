@@ -3,11 +3,12 @@
 ## Behavior
 
 - 登录：邮箱 + 密码；新邮箱自动注册，已有邮箱校验密码；JWT 7 天，无 session 表；邮箱含 `vip` 视为 Pro。
-- Thread：登录后自动有“日常” thread；`POST /threads` 新建会议 thread；用户只能读自己的 thread。
+- Thread：登录后自动有“日常” thread；`POST /threads` 新建会议 thread；用户只能读自己的 thread；会议 thread 的标题可由首条纪要的 `title` 自动补齐。
 - 消息：`POST /threads/{id}/messages` 接收 20,000 字以内文本与 `clientMessageId`；同键重试返回原结果。
 - Agent：`pi-agent-core` 每次请求新建，messages 从 SQLite（Drizzle）恢复；工具为 create / update / delete / complete / search_items / finish。
 - 写操作：工具先 staging；`finish` 在一个事务里提交并返回结构化 payload；没 finish 或报错则回滚。
 - 输出：title、summary、3–7 条 keyPoints、候选 actions；summary / keyPoints 只读。
+- 按钮确认候选待办：`POST /items` 直接创建事项，不扣额度；对话确认仍走消息并扣 1 次。
 - 额度：Free 10 次/天，Pro 无限；一次用户消息扣 1 次，按钮操作 0 次；失败不扣、重试不重复扣。
 - 错误：统一 `{code, message, details?, requestId}`；客户端按 code 映射文案。
 - 通知：iOS 本地通知；Web 页面打开时应用内提示；删除 / 完成 / 退出时取消。
