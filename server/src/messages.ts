@@ -42,142 +42,156 @@ interface SendMessageResponse {
   usage: UsageDto;
 }
 
+const inFlight = new Map<string, Promise<SendMessageResponse>>();
+
 export function registerMessageRoutes(app: FastifyInstance): void {
   app.post('/api/threads/:threadId/messages', { preHandler: app.authenticate }, async (request) => {
     const user = await requireUser(app, request);
     const { threadId } = request.params as { threadId: string };
     const thread = getOwnedThread(app, user.id, threadId);
     const body = sendMessageSchema.parse(request.body);
-    const now = app.now();
+    const key = `${thread.id}:${body.clientMessageId}`;
+    const pending = inFlight.get(key);
+    if (pending) return pending;
 
-    const existingUserMessage = app.db
-      .select()
-      .from(messages)
-      .where(and(eq(messages.threadId, thread.id), eq(messages.clientMessageId, body.clientMessageId)))
-      .get();
+    const task = (async () => {
+      const now = app.now();
 
-    if (existingUserMessage) {
-      const stored = findStoredResponse(app, existingUserMessage.id);
-      if (stored) return stored;
-    }
+      const existingUserMessage = app.db
+        .select()
+        .from(messages)
+        .where(and(eq(messages.threadId, thread.id), eq(messages.clientMessageId, body.clientMessageId)))
+        .get();
 
-    let userMessage: MessageRow;
-    let chargedDay: string | undefined;
-    if (existingUserMessage) {
-      userMessage = existingUserMessage;
-      chargedDay = dayInTimeZone(new Date(existingUserMessage.createdAt), app.config.quotaTimezone);
-    } else {
-      const charge = chargeQuota(app.db, user, app.config, now);
-      chargedDay = charge.day;
-      userMessage = {
+      if (existingUserMessage) {
+        const stored = findStoredResponse(app, existingUserMessage.id);
+        if (stored) return stored;
+      }
+
+      let userMessage: MessageRow;
+      let chargedDay: string | undefined;
+      if (existingUserMessage) {
+        userMessage = existingUserMessage;
+        chargedDay = dayInTimeZone(new Date(existingUserMessage.createdAt), app.config.quotaTimezone);
+      } else {
+        const charge = chargeQuota(app.db, user, app.config, now);
+        chargedDay = charge.day;
+        userMessage = {
+          id: randomUUID(),
+          threadId: thread.id,
+          role: 'user',
+          content: body.content,
+          payloadJson: null,
+          clientMessageId: body.clientMessageId,
+          userMessageId: null,
+          responseJson: null,
+          createdAt: now.toISOString(),
+        };
+        try {
+          app.db.insert(messages).values(userMessage).run();
+        } catch (error) {
+          refundQuota(app.db, user.id, chargedDay, now);
+          throw error;
+        }
+      }
+
+      const fail = async (message: string): Promise<never> => {
+        app.db
+          .delete(messages)
+          .where(or(eq(messages.id, userMessage.id), eq(messages.userMessageId, userMessage.id)))
+          .run();
+        if (chargedDay) refundQuota(app.db, user.id, chargedDay, now);
+        throw internal(message);
+      };
+
+      if (!app.runtime.apiKey) {
+        request.log.warn({ requestId: request.id }, 'message request rejected: model key is not configured');
+        return fail('DEEPSEEK_API_KEY is not configured');
+      }
+
+      const run = await runAgent({
+        db: app.db,
+        runtime: app.runtime,
+        thread,
+        userMessageId: userMessage.id,
+        userText: body.content,
+        now,
+      }).catch(async (error: unknown) => {
+        request.log.error(
+          {
+            requestId: request.id,
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+            errorMessage: error instanceof Error ? error.message : 'unknown',
+          },
+          'agent run failed',
+        );
+        return fail(
+          error instanceof AgentRunError && error.kind === 'unfinished'
+            ? 'Agent did not finish'
+            : 'Agent run failed',
+        );
+      });
+
+      const payload = run.payload;
+      const assistantContent =
+        payload.reply?.trim() || payload.summary?.trim() || payload.title?.trim() || '已处理';
+      const assistantMessage: MessageRow = {
         id: randomUUID(),
         threadId: thread.id,
-        role: 'user',
-        content: body.content,
-        payloadJson: null,
-        clientMessageId: body.clientMessageId,
-        userMessageId: null,
+        role: 'assistant',
+        content: assistantContent,
+        payloadJson: payloadToJson(payload),
+        clientMessageId: null,
+        userMessageId: userMessage.id,
         responseJson: null,
         createdAt: now.toISOString(),
       };
+
+      const responseToolCalls: ToolCallDto[] = run.toolCalls.map((trace) => ({
+        id: trace.id,
+        name: trace.name,
+        arguments: trace.arguments,
+        result: trace.result,
+        createdAt: trace.createdAt,
+      }));
+
+      const response: SendMessageResponse = {
+        userMessage: toMessageDto(userMessage),
+        assistantMessage: toMessageDto(assistantMessage),
+        toolCalls: responseToolCalls,
+        items: run.items.map(toItemDto),
+        usage: getUsage(app.db, user, app.config, now),
+      };
+
       try {
-        app.db.insert(messages).values(userMessage).run();
+        persistSuccess(app, {
+          thread,
+          assistantMessage,
+          toolCalls: run.toolCalls,
+          response,
+          payload,
+          now,
+        });
       } catch (error) {
-        refundQuota(app.db, user.id, chargedDay, now);
-        throw error;
+        request.log.error(
+          {
+            requestId: request.id,
+            errorName: error instanceof Error ? error.name : 'UnknownError',
+            errorMessage: error instanceof Error ? error.message : 'unknown',
+          },
+          'message persistence failed',
+        );
+        return fail('Failed to persist message');
       }
-    }
 
-    const fail = async (message: string): Promise<never> => {
-      app.db
-        .delete(messages)
-        .where(or(eq(messages.id, userMessage.id), eq(messages.userMessageId, userMessage.id)))
-        .run();
-      if (chargedDay) refundQuota(app.db, user.id, chargedDay, now);
-      throw internal(message);
-    };
-
-    if (!app.runtime.apiKey) {
-      request.log.warn({ requestId: request.id }, 'message request rejected: model key is not configured');
-      return fail('DEEPSEEK_API_KEY is not configured');
-    }
-
-    const run = await runAgent({
-      db: app.db,
-      runtime: app.runtime,
-      thread,
-      userMessageId: userMessage.id,
-      userText: body.content,
-      now,
-    }).catch(async (error: unknown) => {
-      request.log.error(
-        {
-          requestId: request.id,
-          errorName: error instanceof Error ? error.name : 'UnknownError',
-          errorMessage: error instanceof Error ? error.message : 'unknown',
-        },
-        'agent run failed',
-      );
-      return fail(
-        error instanceof AgentRunError && error.kind === 'unfinished'
-          ? 'Agent did not finish'
-          : 'Agent run failed',
-      );
-    });
-
-    const payload = run.payload;
-    const assistantContent =
-      payload.reply?.trim() || payload.summary?.trim() || payload.title?.trim() || '已处理';
-    const assistantMessage: MessageRow = {
-      id: randomUUID(),
-      threadId: thread.id,
-      role: 'assistant',
-      content: assistantContent,
-      payloadJson: payloadToJson(payload),
-      clientMessageId: null,
-      userMessageId: userMessage.id,
-      responseJson: null,
-      createdAt: now.toISOString(),
-    };
-
-    const responseToolCalls: ToolCallDto[] = run.toolCalls.map((trace) => ({
-      id: trace.id,
-      name: trace.name,
-      arguments: trace.arguments,
-      result: trace.result,
-      createdAt: trace.createdAt,
-    }));
-
-    const response: SendMessageResponse = {
-      userMessage: toMessageDto(userMessage),
-      assistantMessage: toMessageDto(assistantMessage),
-      toolCalls: responseToolCalls,
-      items: run.items.map(toItemDto),
-      usage: getUsage(app.db, user, app.config, now),
-    };
-
+      return response;
+    })();
+    inFlight.set(key, task);
     try {
-      persistSuccess(app, {
-        thread,
-        assistantMessage,
-        toolCalls: run.toolCalls,
-        response,
-        payload,
-        now,
-      });
-    } catch (error) {
-      request.log.error(
-        {
-          requestId: request.id,
-          errorName: error instanceof Error ? error.name : 'UnknownError',
-          errorMessage: error instanceof Error ? error.message : 'unknown',
-        },
-        'message persistence failed',
-      );
-      return fail('Failed to persist message');
+      return await task;
+    } finally {
+      if (inFlight.get(key) === task) inFlight.delete(key);
     }
-
-    return response;
   });
 }
 

@@ -41,6 +41,8 @@ make e2e                       # HTTP 冒烟（不调模型）
 E2E_MESSAGE=1 make e2e         # 再走一次真实 DeepSeek 消息
 ```
 
+额度证明：`server/test/quota.test.ts` 覆盖第 11 次 429、跨天重置、VIP 不限次、并发同 key 只扣一次。干净副本已用 `git archive` + `npm ci` + `flutter pub get` 验证启动和两端测试。
+
 演示顺序：在“日常”说“提醒我两个小时后去游泳” → 新建会议并粘贴会议记录 → 点选候选待办 → 在“事项”里修改 / 完成 / 删除。
 
 v1 不做：语音 / ASR、Android、真实日历同步、订阅支付、多人协作、多端通知同步。

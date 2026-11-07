@@ -62,6 +62,19 @@ make check-all   # 再加两端测试与运行时一致性
 - **语言与框架**：服务端 Node 22 + TypeScript + Fastify + SQLite（Drizzle）；客户端 Flutter（Riverpod + Dio）；Agent 用 pi-agent-core + pi-ai，模型 DeepSeek `deepseek-flash`。
 - **密钥与环境变量**：模型 key 只从 `.env` 读，提交 `.env.example`，绝不提交真实 key。
 
+## 当前任务：Nota 收尾
+
+目标：把 v1 从“能演示”推进到“可交付”，持续执行到清单为空；P1（语音、真实日历、批量确认、导出、重复提醒、自动识别会议）不在本次范围。
+
+清单：
+
+- 契约、服务端、客户端一致；真实 DeepSeek 全流程。
+- 额度：第 11 次、跨天重置、VIP、并发同 key 只扣一次。
+- 失败原子性、通知取消、候选状态、dueAt 清空、工具轨迹刷新。
+- README 300 字架构、Free 额度证明、干净副本从零启动。
+- 视频、Web/iOS 构建、无密钥、已 push。
+- 发现的新问题追加到清单，全部验证通过才停。
+
 ## 编辑本文件
 
 - 只有「每个会话都必须知道」的规则放这里，每条一到三行。

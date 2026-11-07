@@ -192,4 +192,25 @@ describe('场景：额度 · 重试不重复扣', () => {
     });
     expect(detail.body.messages).toHaveLength(2);
   });
+
+  it('并发提交同一 clientMessageId 只调用一次模型并只扣一次额度', async () => {
+    // given：同一个 key 的两个请求同时到达
+    const threadId = await dailyThreadId(ctx, token);
+    const clientMessageId = 'concurrent-message-1';
+    ctx.faux.setResponses([finishOnly({ reply: '并发结果' })]);
+
+    // when
+    const [first, second] = await Promise.all([
+      sendMessage(ctx, token, '并发记一下', { threadId, clientMessageId }),
+      sendMessage(ctx, token, '并发记一下', { threadId, clientMessageId }),
+    ]);
+
+    // then：两个响应一致，模型只跑一次，额度只扣一次
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(second.body.assistantMessage.id).toBe(first.body.assistantMessage.id);
+    expect(ctx.faux.state.callCount).toBe(1);
+    const usage = await call(ctx, { method: 'GET', url: '/api/usage', token });
+    expect(usage.body.used).toBe(1);
+  });
 });

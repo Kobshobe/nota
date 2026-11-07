@@ -41,7 +41,8 @@ test/           场景测试（临时 SQLite + pi-ai fauxProvider）
 
 - 密码 scrypt；邮箱小写去空格；新邮箱自动注册；JWT HS256 7 天；无 sessions 表。
 - 每个用户一个 `daily` thread；`POST /api/threads` 只创建 `meeting`。
-- 写消息按 `(thread_id, client_message_id)` 幂等；重试直接返回已存响应，不重复扣额度。
+- 写消息按 `(thread_id, client_message_id)` 幂等；顺序重试和同进程并发同 key 都只跑一次 Agent、只扣一次额度。
+- 并发串行化是进程内 Map；多进程部署需要数据库级方案，v1 不做。
 - Free 每天 10 次（Asia/Shanghai 日界），VIP（邮箱含 `vip`）不限；失败或没 `finish` 的 run 会退额度并删除用户消息。
 - Agent 的写操作先进入 staging；`finish` 在一个事务里提交并把 `terminate` 置真，`finishTurn` 在提交后结束本轮。没 `finish` 时整体回滚。
 - 会议长文本默认只返回 `title` / `summary` / `keyPoints` / 候选 `actions`，不自动创建事项；会议标题为默认 `新会议` 时由首条 payload 的 `title` 补齐。
