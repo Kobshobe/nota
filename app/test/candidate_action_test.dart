@@ -55,6 +55,8 @@ void main() {
     expect(api.createItemCalls.single.kind, ItemKind.todo);
     expect(api.createItemCalls.single.title, '准备周报');
     expect(api.createItemCalls.single.dueAt, dueAt);
+    expect(api.createItemCalls.single.sourceMessageId, 'assistant-1');
+    expect(api.createItemCalls.single.candidateIndex, 0);
     expect(find.textContaining('已加入待办'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 5));
@@ -100,5 +102,48 @@ void main() {
     expect(api.createItemCalls.single.dueAt, isNull);
 
     await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('场景：会议纪要 · 重新打开时已确认的候选显示已加入', (tester) async {
+    final now = DateTime.now().toUtc();
+    final thread = NotaThread(
+      id: 'thread-3',
+      kind: ThreadKind.meeting,
+      title: '已确认候选',
+      createdAt: now,
+      updatedAt: now,
+    );
+    final detail = ThreadDetail(
+      thread: thread,
+      messages: [
+        ChatMessage(
+          id: 'assistant-3',
+          role: MessageRole.assistant,
+          content: '已整理这场会议',
+          payload: const MessagePayload(
+            actions: [CandidateAction(title: '准备周报')],
+          ),
+          createdAt: now,
+        ),
+      ],
+    );
+    final existing = Item(
+      id: 'item-existing',
+      threadId: thread.id,
+      kind: ItemKind.todo,
+      title: '准备周报',
+      sourceMessageId: 'assistant-3',
+      candidateIndex: 0,
+      status: ItemStatus.open,
+      createdAt: now,
+      updatedAt: now,
+    );
+    final api = FakeApi(threads: [thread], detail: detail, items: [existing]);
+
+    await tester.pumpWidget(testApp(ChatScreen(threadId: thread.id), api: api));
+    await pumpUntil(tester, find.text('已加入事项'));
+
+    expect(find.text('加入待办'), findsNothing);
+    expect(find.text('加入提醒'), findsNothing);
   });
 }

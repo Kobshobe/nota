@@ -167,6 +167,34 @@ async function main() {
   check('删除事项：状态码 204', deleted.response.status === 204, `实际 ${deleted.response.status}`);
   check('删除事项：空响应', deleted.text === '');
 
+  const reminder = await send({
+    method: 'POST',
+    path: '/api/items',
+    auth: true,
+    body: {
+      threadId,
+      kind: 'reminder',
+      title: '契约检查提醒',
+      dueAt: '2026-11-09T09:00:00+08:00',
+    },
+  });
+  expectSuccess('按钮直建提醒', reminder, {
+    status: 201,
+    keys: ['dueAt', 'id', 'threadId', 'kind', 'title', 'status', 'createdAt', 'updatedAt'],
+  });
+  const cleared = await send({
+    method: 'PATCH',
+    path: `/api/items/${reminder.json.id}`,
+    auth: true,
+    body: { dueAt: null },
+  });
+  expectSuccess('清空提醒时间', cleared, {
+    status: 200,
+    keys: ['id', 'threadId', 'kind', 'title', 'status', 'createdAt', 'updatedAt'],
+  });
+  check('清空提醒时间：dueAt 已移除', !('dueAt' in (cleared.json ?? {})));
+  await send({ method: 'DELETE', path: `/api/items/${reminder.json.id}`, auth: true });
+
   const usage = await send({ method: 'GET', path: '/api/usage', auth: true });
   expectSuccess('额度', usage, { status: 200, keys: ['used', 'limit', 'unlimited', 'date', 'resetsAt'] });
   check('额度：Free 未超额', usage.json?.used === 0 && usage.json?.unlimited === false);

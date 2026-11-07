@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
@@ -445,6 +445,10 @@ components:
           type: string
         payload:
           $ref: '#/components/schemas/MessagePayload'
+        toolCalls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCall'
         createdAt:
           type: string
           format: date-time
@@ -535,6 +539,11 @@ components:
         dueAt:
           type: string
           format: date-time
+        sourceMessageId:
+          type: string
+        candidateIndex:
+          type: integer
+          minimum: 0
         status:
           type: string
           enum: [open, done, deleted]
@@ -570,6 +579,11 @@ components:
         dueAt:
           type: string
           format: date-time
+        sourceMessageId:
+          type: string
+        candidateIndex:
+          type: integer
+          minimum: 0
     UpdateItemRequest:
       type: object
       additionalProperties: false
@@ -580,8 +594,10 @@ components:
           minLength: 1
           maxLength: 200
         dueAt:
-          type: string
-          format: date-time
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
     ToolCall:
       type: object
       additionalProperties: false

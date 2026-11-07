@@ -66,6 +66,8 @@ export const items = sqliteTable(
     kind: text('kind', { enum: ['reminder', 'todo'] }).notNull(),
     title: text('title').notNull(),
     dueAt: text('due_at'),
+    sourceMessageId: text('source_message_id'),
+    candidateIndex: integer('candidate_index'),
     status: text('status', { enum: ['open', 'done', 'deleted'] }).notNull().default('open'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),
@@ -73,6 +75,9 @@ export const items = sqliteTable(
   (table) => [
     index('items_user_status_idx').on(table.userId, table.status),
     index('items_thread_idx').on(table.threadId),
+    uniqueIndex('items_candidate_unique')
+      .on(table.threadId, table.sourceMessageId, table.candidateIndex)
+      .where(sql`${table.sourceMessageId} is not null and ${table.candidateIndex} is not null and ${table.status} != 'deleted'`),
   ],
 );
 

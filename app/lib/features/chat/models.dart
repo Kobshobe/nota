@@ -93,6 +93,7 @@ class ChatMessage {
     required this.content,
     required this.createdAt,
     this.payload,
+    this.toolCalls = const [],
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -103,6 +104,11 @@ class ChatMessage {
       payload: json['payload'] == null
           ? null
           : MessagePayload.fromJson(json['payload'] as Map<String, dynamic>),
+      toolCalls:
+          (json['toolCalls'] as List<dynamic>?)
+              ?.map((entry) => ToolCall.fromJson(entry as Map<String, dynamic>))
+              .toList() ??
+          const [],
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
     );
   }
@@ -111,6 +117,7 @@ class ChatMessage {
   final MessageRole role;
   final String content;
   final MessagePayload? payload;
+  final List<ToolCall> toolCalls;
   final DateTime createdAt;
 
   Map<String, dynamic> toJson() => {
@@ -118,6 +125,8 @@ class ChatMessage {
     'role': role.wire,
     'content': content,
     if (payload != null) 'payload': payload!.toJson(),
+    if (toolCalls.isNotEmpty)
+      'toolCalls': toolCalls.map((toolCall) => toolCall.toJson()).toList(),
     'createdAt': createdAt.toIso8601String(),
   };
 }

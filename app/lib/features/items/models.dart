@@ -41,6 +41,8 @@ class Item {
     required this.createdAt,
     required this.updatedAt,
     this.dueAt,
+    this.sourceMessageId,
+    this.candidateIndex,
   });
 
   factory Item.fromJson(Map<String, dynamic> json) {
@@ -52,6 +54,8 @@ class Item {
       dueAt: json['dueAt'] == null
           ? null
           : DateTime.parse(json['dueAt'] as String).toUtc(),
+      sourceMessageId: json['sourceMessageId'] as String?,
+      candidateIndex: (json['candidateIndex'] as num?)?.toInt(),
       status: ItemStatus.fromWire(json['status'] as String),
       createdAt: DateTime.parse(json['createdAt'] as String).toUtc(),
       updatedAt: DateTime.parse(json['updatedAt'] as String).toUtc(),
@@ -63,9 +67,13 @@ class Item {
   final ItemKind kind;
   final String title;
   final DateTime? dueAt;
+  final String? sourceMessageId;
+  final int? candidateIndex;
   final ItemStatus status;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  bool get isCandidate => sourceMessageId != null && candidateIndex != null;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -73,6 +81,8 @@ class Item {
     'kind': kind.wire,
     'title': title,
     if (dueAt != null) 'dueAt': dueAt!.toIso8601String(),
+    if (sourceMessageId != null) 'sourceMessageId': sourceMessageId,
+    if (candidateIndex != null) 'candidateIndex': candidateIndex,
     'status': status.wire,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),

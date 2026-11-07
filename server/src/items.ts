@@ -3,7 +3,7 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from './auth';
-import { threads, items, type ItemRow } from './db/schema';
+import { threads, items, messages, type ItemRow } from './db/schema';
 import { invalidInput, notFound } from './lib/errors';
 import { toItemDto } from './lib/dto';
 import { getOwnedThread } from './threads';
@@ -16,13 +16,20 @@ const createItemSchema = z
     kind: z.enum(['reminder', 'todo']),
     title: z.string().min(1).max(200),
     dueAt: dateTime.optional(),
+    sourceMessageId: z.string().min(1).optional(),
+    candidateIndex: z.number().int().min(0).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) =>
+      (value.sourceMessageId === undefined) === (value.candidateIndex === undefined),
+    { message: 'sourceMessageId and candidateIndex must be provided together' },
+  );
 
 const updateItemSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
-    dueAt: dateTime.optional(),
+    dueAt: dateTime.nullable().optional(),
   })
   .strict()
   .refine((value) => value.title !== undefined || value.dueAt !== undefined, {
@@ -64,6 +71,22 @@ export function registerItemRoutes(app: FastifyInstance): void {
       throw invalidInput('A reminder requires dueAt', { dueAt: 'Required for reminders' });
     }
     const thread = getOwnedThread(app, user.id, body.threadId);
+    if (body.sourceMessageId !== undefined && body.candidateIndex !== undefined) {
+      const source = app.db
+        .select()
+        .from(messages)
+        .where(
+          and(
+            eq(messages.id, body.sourceMessageId),
+            eq(messages.threadId, thread.id),
+            eq(messages.role, 'assistant'),
+          ),
+        )
+        .get();
+      if (!source) {
+        throw invalidInput('sourceMessageId must be an assistant message in this thread');
+      }
+    }
     const now = app.now();
     const timestamp = now.toISOString();
     const row: ItemRow = {
@@ -73,14 +96,26 @@ export function registerItemRoutes(app: FastifyInstance): void {
       kind: body.kind,
       title: body.title,
       dueAt: body.dueAt ? normalizeDueAt(body.dueAt) : null,
+      sourceMessageId: body.sourceMessageId ?? null,
+      candidateIndex: body.candidateIndex ?? null,
       status: 'open',
       createdAt: timestamp,
       updatedAt: timestamp,
     };
-    app.db.transaction((tx) => {
-      tx.insert(items).values(row).run();
-      tx.update(threads).set({ updatedAt: timestamp }).where(eq(threads.id, thread.id)).run();
-    });
+    try {
+      app.db.transaction((tx) => {
+        tx.insert(items).values(row).run();
+        tx.update(threads).set({ updatedAt: timestamp }).where(eq(threads.id, thread.id)).run();
+      });
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw invalidInput('Candidate action already added', {
+          sourceMessageId: body.sourceMessageId,
+          candidateIndex: body.candidateIndex,
+        });
+      }
+      throw error;
+    }
     return reply.code(201).send(toItemDto(row));
   });
 
@@ -92,7 +127,8 @@ export function registerItemRoutes(app: FastifyInstance): void {
     const timestamp = app.now().toISOString();
     const patch: Partial<ItemRow> = { updatedAt: timestamp };
     if (body.title !== undefined) patch.title = body.title;
-    if (body.dueAt !== undefined) patch.dueAt = normalizeDueAt(body.dueAt);
+    if (body.dueAt === null) patch.dueAt = null;
+    else if (body.dueAt !== undefined) patch.dueAt = normalizeDueAt(body.dueAt);
     app.db.update(items).set(patch).where(eq(items.id, row.id)).run();
     return toItemDto({ ...row, ...patch });
   });
@@ -118,6 +154,15 @@ export function registerItemRoutes(app: FastifyInstance): void {
     app.db.update(items).set({ status: 'done', updatedAt: timestamp }).where(eq(items.id, row.id)).run();
     return toItemDto({ ...row, status: 'done', updatedAt: timestamp });
   });
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    String((error as { code?: unknown }).code).startsWith('SQLITE_CONSTRAINT')
+  );
 }
 
 function findItem(app: FastifyInstance, userId: string, itemId: string): ItemRow | undefined {

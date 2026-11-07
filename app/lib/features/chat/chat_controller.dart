@@ -63,8 +63,22 @@ class ChatController extends AsyncNotifier<ChatState> {
 
   @override
   Future<ChatState> build() async {
-    final detail = await ref.read(apiProvider).getThread(threadId);
-    return ChatState(thread: detail.thread, messages: detail.messages);
+    final api = ref.read(apiProvider);
+    final detail = await api.getThread(threadId);
+    final items = await api.listItems(threadId: threadId);
+    return ChatState(
+      thread: detail.thread,
+      messages: detail.messages,
+      toolCallsByMessageId: {
+        for (final message in detail.messages)
+          if (message.toolCalls.isNotEmpty) message.id: message.toolCalls,
+      },
+      createdActions: {
+        for (final item in items)
+          if (item.sourceMessageId != null && item.candidateIndex != null)
+            '${item.sourceMessageId}:${item.candidateIndex}',
+      },
+    );
   }
 
   Future<bool> send(String content) async {
@@ -130,7 +144,7 @@ class ChatController extends AsyncNotifier<ChatState> {
       var thread = latest.thread;
       final payloadTitle = result.assistantMessage.payload?.title?.trim();
       if (thread.kind == ThreadKind.meeting &&
-          thread.title.trim().isEmpty &&
+          (thread.title.trim().isEmpty || thread.title == '新会议') &&
           payloadTitle != null &&
           payloadTitle.isNotEmpty) {
         thread = NotaThread(
@@ -208,6 +222,8 @@ class ChatController extends AsyncNotifier<ChatState> {
             kind: kind,
             title: action.title,
             dueAt: action.dueAt,
+            sourceMessageId: message.id,
+            candidateIndex: index,
           );
       final latest = state.value ?? current;
       state = AsyncData(

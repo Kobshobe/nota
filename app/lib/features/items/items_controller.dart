@@ -37,10 +37,20 @@ class ItemsController extends AsyncNotifier<List<Item>> {
     return updated;
   }
 
-  Future<Item> updateItem(Item item, {String? title, DateTime? dueAt}) async {
+  Future<Item> updateItem(
+    Item item, {
+    String? title,
+    DateTime? dueAt,
+    bool clearDueAt = false,
+  }) async {
     final updated = await ref
         .read(apiProvider)
-        .updateItem(itemId: item.id, title: title, dueAt: dueAt);
+        .updateItem(
+          itemId: item.id,
+          title: title,
+          dueAt: dueAt,
+          clearDueAt: clearDueAt,
+        );
     _replace(updated);
     _syncOne(updated);
     return updated;

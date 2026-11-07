@@ -85,6 +85,10 @@ describe('场景：Agent · 短命令创建事项', () => {
     expect(detail.body.messages).toHaveLength(2);
     expect(detail.body.messages[0]).toMatchObject({ role: 'user', content: '记一下，明天买牛奶' });
     expect(detail.body.messages[1]).toMatchObject({ role: 'assistant' });
+    expect(detail.body.messages[1].toolCalls.map((trace: { name: string }) => trace.name)).toEqual([
+      'create_item',
+      'finish',
+    ]);
 
     // then：payload、工具轨迹和完整响应都已持久化
     const storedMessages = ctx.app.db.select().from(messagesTable).all();

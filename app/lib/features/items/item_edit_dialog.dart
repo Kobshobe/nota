@@ -5,10 +5,15 @@ import '../../shared/format.dart';
 import 'models.dart';
 
 class ItemEditResult {
-  const ItemEditResult({required this.title, this.dueAt});
+  const ItemEditResult({
+    required this.title,
+    this.dueAt,
+    this.clearDueAt = false,
+  });
 
   final String title;
   final DateTime? dueAt;
+  final bool clearDueAt;
 }
 
 Future<ItemEditResult?> showItemEditDialog(BuildContext context, Item item) {
@@ -30,6 +35,7 @@ class _ItemEditDialog extends StatefulWidget {
 class _ItemEditDialogState extends State<_ItemEditDialog> {
   late final TextEditingController _titleController;
   late DateTime? _dueAt;
+  bool _clearDueAt = false;
 
   @override
   void initState() {
@@ -67,13 +73,23 @@ class _ItemEditDialogState extends State<_ItemEditDialog> {
         time.hour,
         time.minute,
       ).toUtc();
+      _clearDueAt = false;
+    });
+  }
+
+  void _clearTime() {
+    setState(() {
+      _dueAt = null;
+      _clearDueAt = true;
     });
   }
 
   void _submit() {
     final title = _titleController.text.trim();
     if (title.isEmpty) return;
-    Navigator.of(context).pop(ItemEditResult(title: title, dueAt: _dueAt));
+    Navigator.of(
+      context,
+    ).pop(ItemEditResult(title: title, dueAt: _dueAt, clearDueAt: _clearDueAt));
   }
 
   @override
@@ -111,9 +127,19 @@ class _ItemEditDialogState extends State<_ItemEditDialog> {
             ),
             if (_dueAt != null) ...[
               const SizedBox(height: 4),
-              Text(
-                formatDateTime(_dueAt!),
-                style: const TextStyle(fontSize: 11.5, color: AppColors.muted),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      formatDateTime(_dueAt!),
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                  ),
+                  TextButton(onPressed: _clearTime, child: const Text('清除时间')),
+                ],
               ),
             ],
           ],

@@ -1,5 +1,5 @@
-import type { ItemRow, MessageRow, ThreadRow } from '../db/schema';
-import type { CandidateAction, ItemStatus, MessagePayload, ThreadKind } from '../domain';
+import type { ItemRow, MessageRow, ThreadRow, ToolCallRow } from '../db/schema';
+import type { CandidateAction, ItemStatus, MessagePayload, ThreadKind, ToolName } from '../domain';
 
 export interface ThreadDto {
   id: string;
@@ -9,11 +9,20 @@ export interface ThreadDto {
   updatedAt: string;
 }
 
+export interface ToolCallDto {
+  id: string;
+  name: ToolName;
+  arguments: Record<string, unknown>;
+  result: Record<string, unknown>;
+  createdAt: string;
+}
+
 export interface MessageDto {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   payload?: MessagePayload;
+  toolCalls?: ToolCallDto[];
   createdAt: string;
 }
 
@@ -23,6 +32,8 @@ export interface ItemDto {
   kind: 'reminder' | 'todo';
   title: string;
   dueAt?: string;
+  sourceMessageId?: string;
+  candidateIndex?: number;
   status: ItemStatus;
   createdAt: string;
   updatedAt: string;
@@ -61,7 +72,30 @@ export function toItemDto(row: ItemRow): ItemDto {
     updatedAt: row.updatedAt,
   };
   if (row.dueAt) dto.dueAt = row.dueAt;
+  if (row.sourceMessageId) dto.sourceMessageId = row.sourceMessageId;
+  if (row.candidateIndex !== null) dto.candidateIndex = row.candidateIndex;
   return dto;
+}
+
+export function toToolCallDto(row: ToolCallRow): ToolCallDto {
+  const argumentsValue = parseJsonObject(row.argumentsJson);
+  const resultValue = parseJsonObject(row.resultJson);
+  return {
+    id: row.id,
+    name: row.name as ToolName,
+    arguments: argumentsValue,
+    result: resultValue,
+    createdAt: row.createdAt,
+  };
+}
+
+function parseJsonObject(json: string): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(json);
+    return isRecord(value) ? value : {};
+  } catch {
+    return {};
+  }
 }
 
 export function parsePayload(json: string | null): MessagePayload | undefined {

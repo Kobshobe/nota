@@ -35,7 +35,12 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
     await _run(item.id, () async {
       await ref
           .read(itemsProvider.notifier)
-          .updateItem(item, title: result.title, dueAt: result.dueAt);
+          .updateItem(
+            item,
+            title: result.title,
+            dueAt: result.dueAt,
+            clearDueAt: result.clearDueAt,
+          );
       if (mounted) AppSnackBar.show(context, '已更新');
     });
   }

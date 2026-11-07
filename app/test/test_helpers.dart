@@ -68,7 +68,16 @@ class FakeApi implements NotaApi {
   int loginCalls = 0;
   String? lastLoginEmail;
   final List<({String content, String clientMessageId})> sends = [];
-  final List<({String threadId, ItemKind kind, String title, DateTime? dueAt})>
+  final List<
+    ({
+      String threadId,
+      ItemKind kind,
+      String title,
+      DateTime? dueAt,
+      String? sourceMessageId,
+      int? candidateIndex,
+    })
+  >
   createItemCalls = [];
   final List<String> deletedIds = [];
   final List<String> completedIds = [];
@@ -170,9 +179,11 @@ class FakeApi implements NotaApi {
   }
 
   @override
-  Future<List<Item>> listItems({ItemStatus? status}) async {
-    if (status == null) return List.of(items);
-    return items.where((item) => item.status == status).toList();
+  Future<List<Item>> listItems({ItemStatus? status, String? threadId}) async {
+    return items
+        .where((item) => status == null || item.status == status)
+        .where((item) => threadId == null || item.threadId == threadId)
+        .toList();
   }
 
   @override
@@ -181,12 +192,16 @@ class FakeApi implements NotaApi {
     required ItemKind kind,
     required String title,
     DateTime? dueAt,
+    String? sourceMessageId,
+    int? candidateIndex,
   }) async {
     createItemCalls.add((
       threadId: threadId,
       kind: kind,
       title: title,
       dueAt: dueAt,
+      sourceMessageId: sourceMessageId,
+      candidateIndex: candidateIndex,
     ));
     final now = DateTime.now().toUtc();
     final item = Item(
@@ -195,6 +210,8 @@ class FakeApi implements NotaApi {
       kind: kind,
       title: title,
       dueAt: dueAt,
+      sourceMessageId: sourceMessageId,
+      candidateIndex: candidateIndex,
       status: ItemStatus.open,
       createdAt: now,
       updatedAt: now,
@@ -208,6 +225,7 @@ class FakeApi implements NotaApi {
     required String itemId,
     String? title,
     DateTime? dueAt,
+    bool clearDueAt = false,
   }) async {
     final index = items.indexWhere((item) => item.id == itemId);
     final old = items[index];
@@ -216,7 +234,9 @@ class FakeApi implements NotaApi {
       threadId: old.threadId,
       kind: old.kind,
       title: title ?? old.title,
-      dueAt: dueAt ?? old.dueAt,
+      dueAt: clearDueAt ? null : (dueAt ?? old.dueAt),
+      sourceMessageId: old.sourceMessageId,
+      candidateIndex: old.candidateIndex,
       status: old.status,
       createdAt: old.createdAt,
       updatedAt: DateTime.now().toUtc(),
@@ -236,6 +256,8 @@ class FakeApi implements NotaApi {
       kind: old.kind,
       title: old.title,
       dueAt: old.dueAt,
+      sourceMessageId: old.sourceMessageId,
+      candidateIndex: old.candidateIndex,
       status: ItemStatus.done,
       createdAt: old.createdAt,
       updatedAt: DateTime.now().toUtc(),

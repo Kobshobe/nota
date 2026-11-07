@@ -255,19 +255,22 @@ abstract class NotaApi {
     required String clientMessageId,
   });
 
-  Future<List<Item>> listItems({ItemStatus? status});
+  Future<List<Item>> listItems({ItemStatus? status, String? threadId});
 
   Future<Item> createItem({
     required String threadId,
     required ItemKind kind,
     required String title,
     DateTime? dueAt,
+    String? sourceMessageId,
+    int? candidateIndex,
   });
 
   Future<Item> updateItem({
     required String itemId,
     String? title,
     DateTime? dueAt,
+    bool clearDueAt = false,
   });
 
   Future<Item> completeItem(String itemId);
@@ -367,13 +370,14 @@ class ApiClient implements NotaApi {
   }
 
   @override
-  Future<List<Item>> listItems({ItemStatus? status}) {
+  Future<List<Item>> listItems({ItemStatus? status, String? threadId}) {
     return _request(
       () => _dio.get<dynamic>(
         '/api/items',
         queryParameters: {
           'limit': 100,
           if (status != null) 'status': status.wire,
+          'threadId': ?threadId,
         },
       ),
       (data) => (data['items'] as List<dynamic>)
@@ -388,6 +392,8 @@ class ApiClient implements NotaApi {
     required ItemKind kind,
     required String title,
     DateTime? dueAt,
+    String? sourceMessageId,
+    int? candidateIndex,
   }) {
     final body = <String, dynamic>{
       'threadId': threadId,
@@ -397,6 +403,8 @@ class ApiClient implements NotaApi {
     if (dueAt != null) {
       body['dueAt'] = dueAt.toUtc().toIso8601String();
     }
+    if (sourceMessageId != null) body['sourceMessageId'] = sourceMessageId;
+    if (candidateIndex != null) body['candidateIndex'] = candidateIndex;
     return _request(
       () => _dio.post<dynamic>('/api/items', data: body),
       (data) => Item.fromJson(data as Map<String, dynamic>),
@@ -408,10 +416,15 @@ class ApiClient implements NotaApi {
     required String itemId,
     String? title,
     DateTime? dueAt,
+    bool clearDueAt = false,
   }) {
     final body = <String, dynamic>{};
     if (title != null) body['title'] = title;
-    if (dueAt != null) body['dueAt'] = dueAt.toUtc().toIso8601String();
+    if (clearDueAt) {
+      body['dueAt'] = null;
+    } else if (dueAt != null) {
+      body['dueAt'] = dueAt.toUtc().toIso8601String();
+    }
     return _request(
       () => _dio.patch<dynamic>('/api/items/$itemId', data: body),
       (data) => Item.fromJson(data as Map<String, dynamic>),

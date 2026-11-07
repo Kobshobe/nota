@@ -4,7 +4,9 @@ import {
   createMeeting,
   createTestApp,
   dailyThreadId,
+  finishOnly,
   login,
+  sendMessage,
   type TestContext,
 } from './helpers';
 
@@ -280,5 +282,120 @@ describe('场景：事项 · 归属隔离', () => {
     });
     expect(response.status).toBe(200);
     expect(response.body.items).toEqual([]);
+  });
+});
+
+
+describe('场景：事项 · 候选来源与时间清空', () => {
+  let ctx: TestContext;
+  let token: string;
+  let threadId: string;
+
+  beforeEach(async () => {
+    ctx = await createTestApp();
+    token = (await login(ctx)).token;
+    threadId = await dailyThreadId(ctx, token);
+  });
+
+  afterEach(async () => {
+    await ctx.close();
+  });
+
+  it('按钮创建候选事项会记录来源消息和序号，同一候选不能重复创建', async () => {
+    // given：一条带候选 actions 的助手消息
+    ctx.faux.setResponses([
+      finishOnly({
+        reply: '已整理',
+        actions: [{ title: '准备周报' }],
+      }),
+    ]);
+    const sent = await sendMessage(ctx, token, '帮我整理一下', { threadId });
+    expect(sent.status).toBe(200);
+    const assistantId = sent.body.assistantMessage.id;
+
+    // when：按钮确认第一条候选
+    const created = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'todo',
+        title: '准备周报',
+        sourceMessageId: assistantId,
+        candidateIndex: 0,
+      },
+    });
+
+    // then：来源字段落库，重复创建被拒绝
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      title: '准备周报',
+      sourceMessageId: assistantId,
+      candidateIndex: 0,
+    });
+    const duplicate = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'todo',
+        title: '准备周报',
+        sourceMessageId: assistantId,
+        candidateIndex: 0,
+      },
+    });
+    expect(duplicate.status).toBe(400);
+    expect(duplicate.body.code).toBe('INVALID_INPUT');
+
+    const list = await call(ctx, { method: 'GET', url: `/api/items?threadId=${threadId}`, token });
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.items[0].sourceMessageId).toBe(assistantId);
+  });
+
+  it('来源消息必须属于当前 thread 且是助手消息', async () => {
+    ctx.faux.setResponses([finishOnly({ reply: '普通聊天' })]);
+    const sent = await sendMessage(ctx, token, '普通聊天', { threadId });
+    const userMessageId = sent.body.userMessage.id;
+    const response = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'todo',
+        title: '错误来源',
+        sourceMessageId: userMessageId,
+        candidateIndex: 0,
+      },
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('INVALID_INPUT');
+  });
+
+  it('PATCH dueAt=null 可以清空提醒时间', async () => {
+    const created = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'reminder',
+        title: '去游泳',
+        dueAt: '2026-11-09T09:00:00+08:00',
+      },
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.dueAt).toBe('2026-11-09T01:00:00.000Z');
+
+    const cleared = await call(ctx, {
+      method: 'PATCH',
+      url: `/api/items/${created.body.id}`,
+      token,
+      payload: { dueAt: null },
+    });
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.dueAt).toBeUndefined();
   });
 });

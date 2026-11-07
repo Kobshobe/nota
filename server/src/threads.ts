@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from './auth';
-import { messages, threads, type ThreadRow } from './db/schema';
+import { messages, threads, toolCalls, type ThreadRow } from './db/schema';
 import { notFound } from './lib/errors';
-import { toMessageDto, toThreadDto } from './lib/dto';
+import { toMessageDto, toThreadDto, toToolCallDto, type MessageDto } from './lib/dto';
 
 export const DEFAULT_MEETING_TITLE = '新会议';
 
@@ -68,6 +68,28 @@ export function registerThreadRoutes(app: FastifyInstance): void {
       .where(eq(messages.threadId, thread.id))
       .orderBy(sql`${messages.createdAt} asc, messages.rowid asc`)
       .all();
-    return { thread: toThreadDto(thread), messages: rows.map(toMessageDto) };
+    const messageIds = rows.map((row) => row.id);
+    const traces =
+      messageIds.length === 0
+        ? []
+        : app.db
+            .select()
+            .from(toolCalls)
+            .where(inArray(toolCalls.messageId, messageIds))
+            .orderBy(sql`${toolCalls.createdAt} asc, tool_calls.rowid asc`)
+            .all();
+    const tracesByMessage = new Map<string, ReturnType<typeof toToolCallDto>[]>();
+    for (const trace of traces) {
+      const list = tracesByMessage.get(trace.messageId) ?? [];
+      list.push(toToolCallDto(trace));
+      tracesByMessage.set(trace.messageId, list);
+    }
+    const messageDtos: MessageDto[] = rows.map((row) => {
+      const dto = toMessageDto(row);
+      const list = tracesByMessage.get(row.id);
+      if (list && list.length > 0) dto.toolCalls = list;
+      return dto;
+    });
+    return { thread: toThreadDto(thread), messages: messageDtos };
   });
 }

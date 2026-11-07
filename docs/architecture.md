@@ -21,7 +21,7 @@ Flutter 客户端（Web / iOS）通过 HTTP + JSON 调用 Fastify API；API 内�
 
 ## 数据流
 
-用户消息 → 鉴权与额度预扣 → Agent（pi-agent-core）→ 工具 staging → finish 提交 → SQLite → 响应 → Flutter 展示；iOS 本地通知，Web 应用内提示。
+用户消息 → 鉴权与额度预扣 → Agent（pi-agent-core）→ 工具 staging → finish 提交 → SQLite → 响应 → Flutter 展示；刷新 thread 时工具轨迹随消息返回；iOS 本地通知，Web 应用内提示。
 
 ## 数据
 
@@ -30,7 +30,7 @@ Flutter 客户端（Web / iOS）通过 HTTP + JSON 调用 Fastify API；API 内�
 | `users` | id、email、password_hash、created_at |
 | `threads` | id、user_id、kind（daily / meeting）、title、时间 |
 | `messages` | id、thread_id、role、content、payload_json、client_message_id |
-| `items` | id、user_id、thread_id、kind、title、due_at、status |
+| `items` | id、user_id、thread_id、kind、title、due_at、source_message_id、candidate_index、status |
 | `tool_calls` | id、message_id、name、arguments_json、result_json |
 | `usage_daily` | user_id、day、used |
 
