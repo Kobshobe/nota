@@ -74,14 +74,6 @@ export class Staging {
     private readonly now: Date,
   ) {}
 
-  isCommitted(): boolean {
-    return this.committed !== undefined;
-  }
-
-  getCommitted(): CommittedRun | undefined {
-    return this.committed;
-  }
-
   hasFinished(): boolean {
     return this.finishPayload !== undefined;
   }
@@ -169,13 +161,6 @@ export class Staging {
       .limit(limit)
       .all()
       .map(toItemDto);
-  }
-
-  commit(): CommittedRun {
-    if (this.committed) return this.committed;
-    const result = this.db.transaction((tx) => this.commitInTransaction(tx));
-    this.committed = result;
-    return result;
   }
 
   commitInTransaction(tx: Tx): CommittedRun {

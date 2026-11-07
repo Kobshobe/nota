@@ -17,6 +17,7 @@ import { dayInTimeZone } from './lib/time';
 import { DEFAULT_MEETING_TITLE, getOwnedThread } from './threads';
 import { chargeQuota, getUsage, refundQuota, type UsageDto } from './quota';
 import { AgentRunError, runAgent } from './agent/run';
+import type { Staging } from './agent/staging';
 import { payloadToJson } from './agent/payload';
 
 const sendMessageSchema = z
@@ -202,7 +203,7 @@ function persistRun(
     toolCalls: ToolTrace[];
     payload: MessagePayload;
     usage: UsageDto;
-    staging: import('./agent/staging').Staging;
+    staging: Staging;
     now: Date;
   },
 ): SendMessageResponse {
