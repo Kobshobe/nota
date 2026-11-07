@@ -18,6 +18,9 @@ dist/
 data/
 *.log
 
+# 本地临时文件（不入库）
+.tmp/
+
 # 系统与 IDE
 .DS_Store
 .idea/
