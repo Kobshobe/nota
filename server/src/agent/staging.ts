@@ -3,11 +3,13 @@ import { and, desc, eq, like } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db';
 import { items, type ItemRow } from '../db/schema';
-import type { CommittedRun, ItemKind, ItemStatus } from '../domain';
+import type { CommittedRun, ItemKind, MessagePayload, ItemStatus } from '../domain';
 import { toItemDto, type ItemDto } from '../lib/dto';
 import { parseMessagePayload } from './payload';
 
 const dateTime = z.string().datetime({ offset: true, message: 'Must be an ISO 8601 date-time' });
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 type CreateOp = {
   type: 'create';
@@ -62,6 +64,7 @@ export class Staging {
   private readonly operations: Operation[] = [];
   private readonly created = new Map<string, CreateOp>();
   private committed?: CommittedRun;
+  private finishPayload?: MessagePayload;
   private createCount = 0;
 
   constructor(
@@ -77,6 +80,25 @@ export class Staging {
 
   getCommitted(): CommittedRun | undefined {
     return this.committed;
+  }
+
+  hasFinished(): boolean {
+    return this.finishPayload !== undefined;
+  }
+
+  getFinishPayload(): MessagePayload | undefined {
+    return this.finishPayload;
+  }
+
+  stageFinish(rawPayload: unknown): MessagePayload {
+    if (this.finishPayload) return this.finishPayload;
+    this.assertOpen();
+    const payload = parseMessagePayload(rawPayload);
+    if (Object.keys(payload).length === 0) {
+      throw new Error('finish requires at least one non-empty field');
+    }
+    this.finishPayload = payload;
+    return payload;
   }
 
   create(input: CreateItemInput): StagedItem {
@@ -149,15 +171,20 @@ export class Staging {
       .map(toItemDto);
   }
 
-  commit(rawPayload: unknown): CommittedRun {
+  commit(): CommittedRun {
     if (this.committed) return this.committed;
-    const payload = parseMessagePayload(rawPayload);
-    const timestamp = this.now.toISOString();
-    const db = this.db;
+    const result = this.db.transaction((tx) => this.commitInTransaction(tx));
+    this.committed = result;
+    return result;
+  }
 
-    const result = db.transaction((tx) => {
-      const idByTemp = new Map<string, string>();
-      const touched: string[] = [];
+  commitInTransaction(tx: Tx): CommittedRun {
+    const payload = this.finishPayload;
+    if (!payload) throw new Error('finish must be called before commit');
+    const timestamp = this.now.toISOString();
+
+    const idByTemp = new Map<string, string>();
+    const touched: string[] = [];
 
       for (const operation of this.operations) {
         if (operation.type === 'create') {
@@ -213,15 +240,18 @@ export class Staging {
         if (row) rows.push(row);
       }
       return { payload, items: rows };
-    });
+  }
 
+  markCommitted(result: CommittedRun): void {
     this.committed = result;
-    return result;
   }
 
   private assertOpen(): void {
     if (this.committed) {
       throw new Error('finish has already committed this run; no further writes are allowed');
+    }
+    if (this.finishPayload) {
+      throw new Error('finish has already been called; no further writes are allowed');
     }
   }
 

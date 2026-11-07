@@ -3,7 +3,7 @@ import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Usage } from '@earendil-works/pi-ai';
 import type { Db } from '../db';
-import { items, messages, type ItemRow, type MessageRow, type ThreadRow } from '../db/schema';
+import { items, messages, type MessageRow, type ThreadRow } from '../db/schema';
 import type { MessagePayload, ToolName, ToolTrace } from '../domain';
 import { isRecord } from '../lib/dto';
 import type { AgentRuntime } from './runtime';
@@ -44,8 +44,8 @@ export interface RunAgentInput {
 
 export interface AgentRunResult {
   payload: MessagePayload;
-  items: ItemRow[];
   toolCalls: ToolTrace[];
+  staging: Staging;
 }
 
 export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
@@ -86,7 +86,7 @@ export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
     getApiKey: () => runtime.apiKey,
     finishTurn: async ({ message }) => {
       if (message.stopReason === 'error' || message.stopReason === 'aborted') return;
-      return staging.isCommitted() ? { action: 'end' } : undefined;
+      return staging.hasFinished() ? { action: 'end' } : undefined;
     },
   });
 
@@ -110,22 +110,20 @@ export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
   try {
     await agent.prompt(userText);
   } catch (error) {
-    // finish may have committed just before a late provider/event failure; keep those writes.
-    const committed = staging.getCommitted();
-    if (committed) {
-      return { payload: committed.payload, items: committed.items, toolCalls };
-    }
+    // finish may have staged just before a late provider/event failure; let the caller commit or roll back.
+    const payload = staging.getFinishPayload();
+    if (payload) return { payload, toolCalls, staging };
     throw new AgentRunError('failed', 'Agent run failed', { cause: error });
   }
 
-  const committed = staging.getCommitted();
-  if (!committed) {
+  const payload = staging.getFinishPayload();
+  if (!payload) {
     const detail = agent.state.errorMessage;
     if (detail) throw new AgentRunError('failed', 'Agent run failed');
     throw new AgentRunError('unfinished', 'Agent did not finish');
   }
 
-  return { payload: committed.payload, items: committed.items, toolCalls };
+  return { payload, toolCalls, staging };
 }
 
 function toAgentMessage(row: MessageRow, runtime: AgentRuntime): AgentMessage {

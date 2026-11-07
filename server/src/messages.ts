@@ -147,29 +147,15 @@ export function registerMessageRoutes(app: FastifyInstance): void {
         createdAt: now.toISOString(),
       };
 
-      const responseToolCalls: ToolCallDto[] = run.toolCalls.map((trace) => ({
-        id: trace.id,
-        name: trace.name,
-        arguments: trace.arguments,
-        result: trace.result,
-        createdAt: trace.createdAt,
-      }));
-
-      const response: SendMessageResponse = {
-        userMessage: toMessageDto(userMessage),
-        assistantMessage: toMessageDto(assistantMessage),
-        toolCalls: responseToolCalls,
-        items: run.items.map(toItemDto),
-        usage: getUsage(app.db, user, app.config, now),
-      };
-
       try {
-        persistSuccess(app, {
+        return persistRun(app, {
           thread,
+          userMessage,
           assistantMessage,
           toolCalls: run.toolCalls,
-          response,
           payload,
+          usage: getUsage(app.db, user, app.config, now),
+          staging: run.staging,
           now,
         });
       } catch (error) {
@@ -183,8 +169,6 @@ export function registerMessageRoutes(app: FastifyInstance): void {
         );
         return fail('Failed to persist message');
       }
-
-      return response;
     })();
     inFlight.set(key, task);
     try {
@@ -209,21 +193,25 @@ function findStoredResponse(app: FastifyInstance, userMessageId: string): SendMe
   }
 }
 
-function persistSuccess(
+function persistRun(
   app: FastifyInstance,
   input: {
     thread: ThreadRow;
+    userMessage: MessageRow;
     assistantMessage: MessageRow;
     toolCalls: ToolTrace[];
-    response: SendMessageResponse;
     payload: MessagePayload;
+    usage: UsageDto;
+    staging: import('./agent/staging').Staging;
     now: Date;
   },
-): void {
-  const { thread, assistantMessage, toolCalls, response, payload, now } = input;
+): SendMessageResponse {
+  const { thread, userMessage, assistantMessage, toolCalls, payload, usage, staging, now } = input;
   const timestamp = now.toISOString();
 
-  app.db.transaction((tx) => {
+  const response = app.db.transaction((tx) => {
+    const committed = staging.commitInTransaction(tx);
+
     const priorAssistants =
       tx
         .select({ count: sql<number>`count(*)` })
@@ -263,15 +251,30 @@ function persistSuccess(
       .where(eq(threads.id, thread.id))
       .run();
 
-    const storedResponse: SendMessageResponse = {
-      ...response,
+    const result: SendMessageResponse = {
+      userMessage: toMessageDto(userMessage),
       assistantMessage: toMessageDto(assistantMessage),
+      toolCalls: toolCalls.map((trace) => ({
+        id: trace.id,
+        name: trace.name,
+        arguments: trace.arguments,
+        result: trace.result,
+        createdAt: trace.createdAt,
+      })),
+      items: committed.items.map(toItemDto),
+      usage,
     };
+
     tx.update(messages)
-      .set({ responseJson: JSON.stringify(storedResponse) })
+      .set({ responseJson: JSON.stringify(result) })
       .where(eq(messages.id, assistantMessage.id))
       .run();
+
+    return { response: result, committed };
   });
+
+  staging.markCommitted(response.committed);
+  return response.response;
 }
 
 export type { SendMessageResponse, ToolCallDto };

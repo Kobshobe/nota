@@ -1,6 +1,5 @@
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { arr, num, obj, oneOf, opt, str } from '@earendil-works/pi-schema';
-import { toItemDto } from '../lib/dto';
 import type { Staging } from './staging';
 
 function result(details: object, terminate = false) {
@@ -127,15 +126,8 @@ export function createAgentTools(staging: Staging): AgentTool<any>[] {
           'finish requires at least one non-empty field: reply, summary, keyPoints, or actions',
         );
       }
-      const committed = staging.commit(params);
-      return result(
-        {
-          committed: true,
-          items: committed.items.map(toItemDto),
-          payload: committed.payload,
-        },
-        true,
-      );
+      const payload = staging.stageFinish(params);
+      return result({ finished: true, payload }, true);
     },
   };
 

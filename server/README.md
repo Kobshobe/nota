@@ -44,7 +44,7 @@ test/           场景测试（临时 SQLite + pi-ai fauxProvider）
 - 写消息按 `(thread_id, client_message_id)` 幂等；顺序重试和同进程并发同 key 都只跑一次 Agent、只扣一次额度。
 - 并发串行化是进程内 Map；多进程部署需要数据库级方案，v1 不做。
 - Free 每天 10 次（Asia/Shanghai 日界），VIP（邮箱含 `vip`）不限；失败或没 `finish` 的 run 会退额度并删除用户消息。
-- Agent 的写操作先进入 staging；`finish` 在一个事务里提交并把 `terminate` 置真，`finishTurn` 在提交后结束本轮。没 `finish` 时整体回滚。
+- Agent 的写操作先进入 staging；`finish` 校验并暂存 payload，`persistRun` 在同一事务里提交事项、assistant、tool_calls 和幂等响应；没 `finish` 或事务失败整体回滚。
 - 会议长文本默认只返回 `title` / `summary` / `keyPoints` / 候选 `actions`，不自动创建事项；会议标题为默认 `新会议` 时由首条 payload 的 `title` 补齐。
 - 所有错误响应为 `{code, message, details?, requestId}`，`X-Request-Id` 与 `requestId` 一致；不返回堆栈、SQL 或第三方原始错误。
 

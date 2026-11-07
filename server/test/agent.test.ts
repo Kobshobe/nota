@@ -549,7 +549,7 @@ describe('场景：Agent · finish 幂等与混合批次', () => {
     );
     expect(finishTraces).toHaveLength(2);
     expect(finishTraces[0].result.error).toContain('finish requires at least one non-empty field');
-    expect(finishTraces[1].result.committed).toBe(true);
+    expect(finishTraces[1].result.finished).toBe(true);
     expect(response.body.assistantMessage.payload.reply).toBe('已补上结果');
   });
 
@@ -572,7 +572,7 @@ describe('场景：Agent · finish 幂等与混合批次', () => {
     expect(response.body.items[0].title).toBe('提交前创建');
     const lastTrace = response.body.toolCalls.at(-1);
     expect(lastTrace.name).toBe('create_item');
-    expect(lastTrace.result.error).toContain('already committed');
+    expect(lastTrace.result.error).toContain('finish has already been called');
   });
 });
 
@@ -660,5 +660,55 @@ describe('场景：Agent · 按 thread 搜索事项', () => {
     );
     expect(trace.result.items).toHaveLength(1);
     expect(trace.result.items[0].threadId).toBe(meeting.id);
+  });
+});
+
+
+describe('场景：Agent · 持久化失败整体回滚', () => {
+  let ctx: TestContext;
+  let auth: Authed;
+
+  beforeEach(async () => {
+    ctx = await createTestApp();
+    auth = await login(ctx);
+  });
+
+  afterEach(async () => {
+    await ctx.close();
+  });
+
+  it('assistant 落库失败时事项、消息和额度一起回滚', async () => {
+    // given：制造 assistant 插入失败，模型会先创建事项再 finish
+    ctx.app.sqlite.exec(`
+      CREATE TRIGGER fail_assistant_insert
+      BEFORE INSERT ON messages
+      WHEN NEW.role = 'assistant'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced assistant failure');
+      END;
+    `);
+    ctx.faux.setResponses([
+      finishWith(
+        [{ name: 'create_item', args: { title: '不应存在', kind: 'todo' } }],
+        { reply: '已处理' },
+      ),
+    ]);
+
+    // when
+    const response = await sendMessage(ctx, auth.token, '记一下不应存在');
+
+    // then：事务回滚，额度退回，用户消息也不留下
+    expect(response.status).toBe(500);
+    const items = await call(ctx, { method: 'GET', url: '/api/items', token: auth.token });
+    expect(items.body.items).toHaveLength(0);
+    const usage = await call(ctx, { method: 'GET', url: '/api/usage', token: auth.token });
+    expect(usage.body.used).toBe(0);
+    const threadId = await dailyThreadId(ctx, auth.token);
+    const thread = await call(ctx, {
+      method: 'GET',
+      url: `/api/threads/${threadId}`,
+      token: auth.token,
+    });
+    expect(thread.body.messages).toHaveLength(0);
   });
 });
