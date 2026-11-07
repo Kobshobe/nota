@@ -3,10 +3,10 @@
   "budgets": {
     ".agents/references/doc-standard.md": 6100,
     ".changes/README.md": 4400,
-    "AGENTS.md": 2000,
+    "AGENTS.md": 2100,
     "README.md": 1350,
-    "docs/architecture.md": 500,
-    "docs/layout.md": 700,
+    "docs/architecture.md": 900,
+    "docs/layout.md": 800,
     "docs/workflow.md": 1750
   }
 }

@@ -28,7 +28,7 @@ const cases = [
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const base = process.env.API_BASE_URL ?? 'http://127.0.0.1:8080';
-const startCommand = process.env.START_CMD ?? 'node server/src/server.js';
+const startCommand = process.env.START_CMD ?? 'npm --prefix server run start';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

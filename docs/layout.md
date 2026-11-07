@@ -5,8 +5,8 @@
 | 路径 | 拥有者 | 放什么 | 不放什么 |
 |---|---|---|---|
 | `contract/` | 契约维护者 | `openapi.yaml`；`baseline/` 存上一个发布版本的快照 | 实现代码、生成物 |
-| `server/` | 服务端 | `src/`、`test/` | 客户端代码、契约副本 |
-| `app/` | 客户端 | `lib/`、`test/`、`integration_test/`、`ios/` | 服务端代码 |
+| `server/` | 服务端 | Node 22 + TypeScript + Fastify；`src/`、`test/`、数据库迁移 | 客户端代码、契约副本 |
+| `app/` | 客户端 | Flutter；`lib/`、`test/`、`integration_test/`、`web/`、`ios/`、`android/` | 服务端代码 |
 | `docs/` | 所有人 | 架构、目录地图、工作循环、交接说明、ADR | 变更记录 |
 | `.changes/` | 变更作者 | 进行中的链；`archive/` 是冻结的历史 | 当前行为的权威描述 |
 | `scripts/` | 所有人 | 门禁脚本与环境脚本 | 业务逻辑 |

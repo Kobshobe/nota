@@ -21,6 +21,11 @@ data/
 # 本地临时文件（不入库）
 .tmp/
 
+# 本地环境变量与密钥
+.env
+.env.*
+!.env.example
+
 # 系统与 IDE
 .DS_Store
 .idea/

@@ -1,7 +1,7 @@
 # 改这里：你的两端目录与测试命令。只有一端就把另一端的变量改成同一个目录。
 SERVER_DIR ?= server
 CLIENT_DIR ?= app
-SERVER_TEST = cd $(SERVER_DIR) && node --test
+SERVER_TEST = cd $(SERVER_DIR) && npm test
 CLIENT_TEST = cd $(CLIENT_DIR) && flutter test
 
 PORT ?= 8080

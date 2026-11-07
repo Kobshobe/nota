@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
-  title: 项目 API
+  title: Nota API
   version: 0.1.0
   description: |
-    <!-- 一句话说明这个服务是干什么的。 -->
+    Nota MVP：把一段话整理成摘要与待办，并由 Agent 调用工具创建待办、设置提醒、查询历史。
 
     通用约定：
     - 请求与响应体都是 JSON；请求的 Content-Type 必须是 application/json。
-    - 未注册的路径或不支持的方法返回 404，错误码 NOT_FOUND。
+    - 需要身份的接口必须带 X-Client-Id；缺失或格式不合法返回 400 INVALID_INPUT。
+    - 未注册的路径返回 404 NOT_FOUND；路径已注册但笔记不属于该 client 也返回 404。
     - 错误响应恒为 {code, message}；code 只能取 ErrorResponse 枚举里的值。
 servers:
   - url: http://127.0.0.1:8080
@@ -24,7 +25,152 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /api/notes:
+    post:
+      operationId: createNote
+      summary: 提交一段话，返回摘要、待办与工具执行结果
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNoteRequest'
+      responses:
+        '200':
+          description: 处理完成；同一幂等键重复提交返回原结果，不重复扣额度
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: 请求不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: 当日额度已用完
+          headers:
+            Retry-After:
+              description: 距离额度重置的秒数
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      operationId: listNotes
+      summary: 列出当前 client 的笔记
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: 笔记列表，按创建时间倒序
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotesResponse'
+        '400':
+          description: 请求不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/notes/{noteId}:
+    get:
+      operationId: getNote
+      summary: 读取一条笔记
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 笔记详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Note'
+        '400':
+          description: 请求不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 笔记不存在或不属于当前 client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/usage:
+    get:
+      operationId: getUsage
+      summary: 查询当日额度
+      parameters:
+        - $ref: '#/components/parameters/ClientId'
+      responses:
+        '200':
+          description: 当前 client 当日的额度使用情况
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usage'
+        '400':
+          description: 请求不合法
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务端错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
+  parameters:
+    ClientId:
+      name: X-Client-Id
+      in: header
+      required: true
+      description: 客户端首次启动生成的 UUID；服务端按它归属笔记与额度
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 64
   schemas:
     HealthResponse:
       type: object
@@ -33,6 +179,109 @@ components:
       properties:
         ok:
           type: boolean
+    CreateNoteRequest:
+      type: object
+      additionalProperties: false
+      required: [text, idempotencyKey]
+      properties:
+        text:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        source:
+          type: string
+          enum: [text, voice]
+          default: text
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 64
+          description: 客户端生成；同一键重复提交返回原结果
+    Note:
+      type: object
+      additionalProperties: false
+      required: [id, createdAt, source, transcript, summary, todos, toolCalls, usage]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum: [text, voice]
+        transcript:
+          type: string
+        summary:
+          type: string
+        todos:
+          type: array
+          items:
+            $ref: '#/components/schemas/Todo'
+        toolCalls:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToolCall'
+        usage:
+          $ref: '#/components/schemas/Usage'
+    Todo:
+      type: object
+      additionalProperties: false
+      required: [id, title, status]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [open, done]
+    ToolCall:
+      type: object
+      additionalProperties: false
+      required: [name, arguments, result, createdAt]
+      properties:
+        name:
+          type: string
+          enum: [create_todo, create_reminder, search_history]
+        arguments:
+          type: object
+          additionalProperties: true
+        result:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+    Usage:
+      type: object
+      additionalProperties: false
+      required: [used, limit, date, resetsAt]
+      properties:
+        used:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        date:
+          type: string
+          format: date
+        resetsAt:
+          type: string
+          format: date-time
+    NotesResponse:
+      type: object
+      additionalProperties: false
+      required: [notes]
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Note'
     ErrorResponse:
       type: object
       additionalProperties: false
@@ -40,8 +289,8 @@ components:
       properties:
         code:
           type: string
-          enum: [INVALID_INPUT, NOT_FOUND, INTERNAL]
+          enum: [INVALID_INPUT, NOT_FOUND, QUOTA_EXCEEDED, INTERNAL]
           description: 机器可读的错误码，客户端按码做 UI 决策
         message:
           type: string
-          description: 人类可读的英文说明，不作为 UI 文案
+          description: 人类可读的说明，不作为 UI 文案

@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 PORT="${PORT:-8080}"
 BASE="http://127.0.0.1:${PORT}"
-START_CMD="${START_CMD:-node server/src/server.js}"
+START_CMD="${START_CMD:-npm --prefix server run start}"
 E2E_CMD="${E2E_CMD:-}"
 
 # 示例（Flutter + iOS 模拟器）：

@@ -55,13 +55,11 @@ make check-all   # 再加两端测试与运行时一致性
 
 ## 项目约定
 
-<!-- 换成你的项目。删掉注释，保留条目。 -->
-
-- **架构**：<!-- 一句话：客户端 + 服务端？单体？CLI？ -->
-- **环境**：`source scripts/env.sh`，它设置工具链路径和缓存位置。
-- **目录布局**：`contract/`、`server/`、`app/`、`docs/`、`scripts/`、`.changes/`。
-- **语言与框架**：<!-- 服务端 Node 22 + 原生 node:http，零运行时依赖；客户端 Flutter，HTTP 用 dart:io -->
-- **密钥与环境变量**：<!-- 从哪读；什么绝不提交 -->
+- **架构**：Flutter 客户端（Web/iOS/Android）+ Node 22 API，HTTP + JSON；唯一耦合点是 [`contract/openapi.yaml`](contract/openapi.yaml)。
+- **环境**：`source scripts/env.sh`，它设置 Flutter SDK、pub 缓存、`PORT` 与 `API_BASE_URL`。
+- **目录布局**：`contract/`、`server/`、`app/`、`docs/`、`scripts/`、`.changes/`；`.tmp/` 只放本地临时文件。
+- **语言与框架**：服务端 Node 22 + TypeScript + Fastify + SQLite；客户端 Flutter；端上语音转写用 `speech_to_text`；Agent 用 DeepSeek 的 function calling。
+- **密钥与环境变量**：模型 key 只从 `.env` 读，提交 `.env.example`，绝不提交真实 key。
 
 ## 编辑本文件
 
