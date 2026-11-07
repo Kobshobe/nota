@@ -1,0 +1,35 @@
+{
+    "name": "Nota",
+    "short_name": "Nota",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#F6F0E4",
+    "theme_color": "#5E7159",
+    "description": "Nota：把一句话，变成待办和提醒。",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

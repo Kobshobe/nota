@@ -157,7 +157,7 @@ server/test/
 - 每次请求新建 `Agent`，从 SQLite 恢复 messages；`sessionId` 用 thread id。
 - 工具：`create_item`、`update_item`、`delete_item`、`complete_item`、`search_items`、`finish`；写操作 `executionMode: "sequential"`。
 - `finish` 提交 staging，返回 summary / keyPoints / actions / reply，`terminate: true`；没 finish 或报错则回滚并退额度。
-- 订阅 `message_end`、`tool_execution_end`、`agent_end` 落库；v1 同步收集，P1 再 SSE。
+- 订阅 `tool_execution_end` 收集工具轨迹；运行结束后把 assistant 消息、payload、tool_calls 与幂等响一并落库；v1 同步，P1 再 SSE。
 - DeepSeek 用 `deepseekProvider()` + `deepseek-flash`；`thinkingLevel` 先 `low`。
 
 ## 6. 测试
