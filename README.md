@@ -8,6 +8,7 @@ AI 语音便签 / 会议助手 MVP：一个入口，接住从一句提醒到一�
 - 架构：[`docs/architecture.md`](docs/architecture.md)
 - 工程约定：[`docs/engineering.md`](docs/engineering.md)
 - 接口契约：[`contract/openapi.yaml`](contract/openapi.yaml)
+- 演示视频（45s）：[`demo/nota-demo.mp4`](demo/nota-demo.mp4)
 
 ## 架构
 
