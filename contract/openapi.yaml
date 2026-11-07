@@ -1,0 +1,47 @@
+openapi: 3.1.0
+info:
+  title: 项目 API
+  version: 0.1.0
+  description: |
+    <!-- 一句话说明这个服务是干什么的。 -->
+
+    通用约定：
+    - 请求与响应体都是 JSON；请求的 Content-Type 必须是 application/json。
+    - 未注册的路径或不支持的方法返回 404，错误码 NOT_FOUND。
+    - 错误响应恒为 {code, message}；code 只能取 ErrorResponse 枚举里的值。
+servers:
+  - url: http://127.0.0.1:8080
+    description: 本地开发
+paths:
+  /api/health:
+    get:
+      operationId: health
+      summary: 健康检查
+      responses:
+        '200':
+          description: 服务可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum: [INVALID_INPUT, NOT_FOUND, INTERNAL]
+          description: 机器可读的错误码，客户端按码做 UI 决策
+        message:
+          type: string
+          description: 人类可读的英文说明，不作为 UI 文案

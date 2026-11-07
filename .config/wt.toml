@@ -1,0 +1,9 @@
+# Worktrunk 项目配置。跟着仓库走，团队共享；文档见 https://worktrunk.dev/config/
+
+# 每个 worktree 一个独立端口，`wt list` 会显示可点击的地址。
+# 并行跑多个实例时，端口冲突就靠它避免。
+[list]
+url = "http://127.0.0.1:{{ branch | hash_port }}"
+
+# 新 worktree 里自动装依赖。改成你的命令。
+# post-switch = "if [ -d app ]; then (cd app && <你的依赖安装命令>); fi"

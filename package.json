@@ -1,0 +1,14 @@
+{
+  "name": "project-gates",
+  "private": true,
+  "type": "module",
+  "description": "仓库级门禁脚本的依赖。应用本身不该依赖这里的东西。",
+  "scripts": {
+    "check:docs": "python3 .agents/scripts/check_docs.py",
+    "check:breaking": "node scripts/check-breaking.mjs",
+    "check:contract": "node scripts/check-contract.mjs"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

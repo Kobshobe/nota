@@ -1,0 +1,25 @@
+# 依赖与缓存
+node_modules/
+.cache/
+.toolchain/
+__pycache__/
+*.pyc
+
+# 构建产物
+build/
+dist/
+.dart_tool/
+**/build/
+**/.dart_tool/
+**/Pods/
+**/xcuserdata/
+
+# 运行时数据
+data/
+*.log
+
+# 系统与 IDE
+.DS_Store
+.idea/
+*.iml
+.flutter-plugins-dependencies
