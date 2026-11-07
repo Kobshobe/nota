@@ -7,7 +7,7 @@
 | `contract/` | 契约维护者 | `openapi.yaml`；`baseline/` 存上一个发布版本的快照 | 实现代码、生成物 |
 | `server/` | 服务端 | Node 22 + TypeScript + Fastify；`src/`、`test/`、数据库迁移 | 客户端代码、契约副本 |
 | `app/` | 客户端 | Flutter；`lib/`、`test/`、`integration_test/`、`web/`、`ios/`、`android/` | 服务端代码 |
-| `docs/` | 所有人 | 架构、产品范围、目录地图、工作循环、交接说明、ADR | 变更记录 |
+| `docs/` | 所有人 | 架构、产品范围、工程约定、目录地图、工作循环、交接说明、ADR | 变更记录 |
 | `.changes/` | 变更作者 | 进行中的链；`archive/` 是冻结的历史 | 当前行为的权威描述 |
 | `scripts/` | 所有人 | 门禁脚本与环境脚本 | 业务逻辑 |
 | `.agents/` | 所有人 | 文档标准、技能、文档门禁实现 | 项目特有约定 |

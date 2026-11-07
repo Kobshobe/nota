@@ -6,6 +6,7 @@
 
 - 当前任务：看 `.changes/` 里有没有进行中的链；没有就是空闲，等一个任务
 - 架构与模块边界：[`docs/architecture.md`](docs/architecture.md)
+- 工程约定：[`docs/engineering.md`](docs/engineering.md)
 - 目录地图：[`docs/layout.md`](docs/layout.md)
 - 工作循环与环境：[`docs/workflow.md`](docs/workflow.md)
 - API 唯一事实源：[`contract/openapi.yaml`](contract/openapi.yaml)
@@ -55,10 +56,10 @@ make check-all   # 再加两端测试与运行时一致性
 
 ## 项目约定
 
-- **架构**：Flutter 客户端（Web/iOS/Android）+ Node 22 API，HTTP + JSON；唯一耦合点是 [`contract/openapi.yaml`](contract/openapi.yaml)。
+- **架构**：Flutter 客户端（Web / iOS）+ Node 22 API，HTTP + JSON；唯一耦合点是 [`contract/openapi.yaml`](contract/openapi.yaml)。
 - **环境**：`source scripts/env.sh`，它设置 Flutter SDK、pub 缓存、`PORT` 与 `API_BASE_URL`。
 - **目录布局**：`contract/`、`server/`、`app/`、`docs/`、`scripts/`、`.changes/`；`.tmp/` 只放本地临时文件。
-- **语言与框架**：服务端 Node 22 + TypeScript + Fastify + SQLite；客户端 Flutter；端上语音转写用 `speech_to_text`；Agent 用 DeepSeek 的 function calling。
+- **语言与框架**：服务端 Node 22 + TypeScript + Fastify + SQLite（Drizzle）；客户端 Flutter（Riverpod + Dio）；Agent 用 pi-agent-core + pi-ai，模型 DeepSeek `deepseek-flash`。
 - **密钥与环境变量**：模型 key 只从 `.env` 读，提交 `.env.example`，绝不提交真实 key。
 
 ## 编辑本文件

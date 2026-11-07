@@ -1,23 +1,36 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    Nota MVP：把一段话整理成摘要与待办，并由 Agent 调用工具创建待办、设置提醒、查询历史。
+    Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
     通用约定：
     - 请求与响应体都是 JSON；请求的 Content-Type 必须是 application/json。
-    - 需要身份的接口必须带 X-Client-Id；缺失或格式不合法返回 400 INVALID_INPUT。
-    - 未注册的路径返回 404 NOT_FOUND；路径已注册但笔记不属于该 client 也返回 404。
-    - 错误响应恒为 {code, message}；code 只能取 ErrorResponse 枚举里的值。
+    - 除登录和健康检查外，所有接口要求 Authorization: Bearer <JWT>。
+    - 每个响应带 X-Request-Id；错误体带 requestId。
+    - 错误响应恒为 {code, message, details?, requestId}；code 只能取 ErrorResponse 枚举里的值。
+    - 单次文字输入上限 20,000 字符。
+    - 写消息带 clientMessageId；同键重试返回原结果，不重复创建或扣额度。
+security:
+  - bearerAuth: []
 servers:
   - url: http://127.0.0.1:8080
     description: 本地开发
+tags:
+  - name: health
+  - name: auth
+  - name: threads
+  - name: messages
+  - name: items
+  - name: usage
 paths:
   /api/health:
     get:
+      tags: [health]
       operationId: health
       summary: 健康检查
+      security: []
       responses:
         '200':
           description: 服务可用
@@ -25,152 +38,281 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
-  /api/notes:
+  /api/auth/login:
     post:
-      operationId: createNote
-      summary: 提交一段话，返回摘要、待办与工具执行结果
-      parameters:
-        - $ref: '#/components/parameters/ClientId'
+      tags: [auth]
+      operationId: login
+      summary: 登录；新邮箱自动注册
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateNoteRequest'
+              $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: 处理完成；同一幂等键重复提交返回原结果，不重复扣额度
+          description: 登录成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Note'
+                $ref: '#/components/schemas/AuthResponse'
         '400':
-          description: 请求不合法
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '429':
-          description: 当日额度已用完
-          headers:
-            Retry-After:
-              description: 距离额度重置的秒数
-              schema:
-                type: integer
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务端错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/auth/me:
     get:
-      operationId: listNotes
-      summary: 列出当前 client 的笔记
+      tags: [auth]
+      operationId: me
+      summary: 当前登录用户
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/threads:
+    get:
+      tags: [threads]
+      operationId: listThreads
+      summary: 列出当前用户的 thread
+      responses:
+        '200':
+          description: 日常 thread 与会议 thread
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [threads]
+      operationId: createThread
+      summary: 新建会议 thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateThreadRequest'
+      responses:
+        '201':
+          description: 会议 thread 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Thread'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/threads/{threadId}:
+    get:
+      tags: [threads]
+      operationId: getThread
+      summary: 读取 thread 与消息
       parameters:
-        - $ref: '#/components/parameters/ClientId'
+        - $ref: '#/components/parameters/ThreadId'
+      responses:
+        '200':
+          description: thread 详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ThreadDetail'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/threads/{threadId}/messages:
+    post:
+      tags: [messages]
+      operationId: sendMessage
+      summary: 发送一条用户消息，运行 Agent 并返回结果
+      parameters:
+        - $ref: '#/components/parameters/ThreadId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Agent 处理完成；同 clientMessageId 重复提交返回原结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/QuotaExceeded'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/items:
+    get:
+      tags: [items]
+      operationId: listItems
+      summary: 列出当前用户的事项
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [open, done]
         - name: limit
           in: query
           required: false
           schema:
             type: integer
             minimum: 1
-            maximum: 50
-            default: 20
+            maximum: 100
+            default: 50
       responses:
         '200':
-          description: 笔记列表，按创建时间倒序
+          description: 事项列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/NotesResponse'
-        '400':
-          description: 请求不合法
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务端错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-  /api/notes/{noteId}:
-    get:
-      operationId: getNote
-      summary: 读取一条笔记
+                $ref: '#/components/schemas/ItemsResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/items/{itemId}:
+    patch:
+      tags: [items]
+      operationId: updateItem
+      summary: 修改事项标题或时间
       parameters:
-        - $ref: '#/components/parameters/ClientId'
-        - name: noteId
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateItemRequest'
       responses:
         '200':
-          description: 笔记详情
+          description: 修改后的事项
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Note'
+                $ref: '#/components/schemas/Item'
         '400':
-          description: 请求不合法
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
-          description: 笔记不存在或不属于当前 client
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags: [items]
+      operationId: deleteItem
+      summary: 删除事项
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      responses:
+        '204':
+          description: 已删除
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/items/{itemId}/complete:
+    post:
+      tags: [items]
+      operationId: completeItem
+      summary: 标记事项完成
+      parameters:
+        - $ref: '#/components/parameters/ItemId'
+      responses:
+        '200':
+          description: 已完成的事项
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务端错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: '#/components/schemas/Item'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/usage:
     get:
+      tags: [usage]
       operationId: getUsage
       summary: 查询当日额度
-      parameters:
-        - $ref: '#/components/parameters/ClientId'
       responses:
         '200':
-          description: 当前 client 当日的额度使用情况
+          description: 当前用户当日额度
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Usage'
-        '400':
-          description: 请求不合法
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
-          description: 服务端错误
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   parameters:
-    ClientId:
-      name: X-Client-Id
-      in: header
+    ThreadId:
+      name: threadId
+      in: path
       required: true
-      description: 客户端首次启动生成的 UUID；服务端按它归属笔记与额度
       schema:
         type: string
-        minLength: 8
-        maxLength: 64
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    BadRequest:
+      description: 请求不合法
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: 未登录、token 失效或登录凭据错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 资源不存在或不属于当前用户
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    QuotaExceeded:
+      description: 当日额度已用完
+      headers:
+        Retry-After:
+          description: 距离额度重置的秒数
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: 服务端错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   schemas:
     HealthResponse:
       type: object
@@ -179,58 +321,184 @@ components:
       properties:
         ok:
           type: boolean
-    CreateNoteRequest:
+    LoginRequest:
       type: object
       additionalProperties: false
-      required: [text, idempotencyKey]
+      required: [email, password]
       properties:
-        text:
+        email:
           type: string
-          minLength: 1
-          maxLength: 2000
-        source:
+          format: email
+          maxLength: 254
+        password:
           type: string
-          enum: [text, voice]
-          default: text
-        idempotencyKey:
-          type: string
-          minLength: 8
-          maxLength: 64
-          description: 客户端生成；同一键重复提交返回原结果
-    Note:
+          minLength: 6
+          maxLength: 128
+    AuthResponse:
       type: object
       additionalProperties: false
-      required: [id, createdAt, source, transcript, summary, todos, toolCalls, usage]
+      required: [token, user]
+      properties:
+        token:
+          type: string
+          description: JWT；客户端存 secure storage
+        user:
+          $ref: '#/components/schemas/User'
+    User:
+      type: object
+      additionalProperties: false
+      required: [email, isVip]
+      properties:
+        email:
+          type: string
+          format: email
+        isVip:
+          type: boolean
+    Thread:
+      type: object
+      additionalProperties: false
+      required: [id, kind, title, createdAt, updatedAt]
       properties:
         id:
+          type: string
+        kind:
+          type: string
+          enum: [daily, meeting]
+        title:
           type: string
         createdAt:
           type: string
           format: date-time
-        source:
+        updatedAt:
           type: string
-          enum: [text, voice]
-        transcript:
-          type: string
-        summary:
-          type: string
-        todos:
+          format: date-time
+    ThreadsResponse:
+      type: object
+      additionalProperties: false
+      required: [threads]
+      properties:
+        threads:
           type: array
           items:
-            $ref: '#/components/schemas/Todo'
+            $ref: '#/components/schemas/Thread'
+    CreateThreadRequest:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [meeting]
+        title:
+          type: string
+          maxLength: 100
+    ThreadDetail:
+      type: object
+      additionalProperties: false
+      required: [thread, messages]
+      properties:
+        thread:
+          $ref: '#/components/schemas/Thread'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+    Message:
+      type: object
+      additionalProperties: false
+      required: [id, role, content, createdAt]
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        payload:
+          $ref: '#/components/schemas/MessagePayload'
+        createdAt:
+          type: string
+          format: date-time
+    MessagePayload:
+      type: object
+      additionalProperties: false
+      properties:
+        summary:
+          type: string
+        keyPoints:
+          type: array
+          items:
+            type: string
+        actions:
+          type: array
+          items:
+            $ref: '#/components/schemas/CandidateAction'
+        reply:
+          type: string
+    CandidateAction:
+      type: object
+      additionalProperties: false
+      required: [title]
+      properties:
+        title:
+          type: string
+        owner:
+          type: string
+        dueAt:
+          type: string
+          format: date-time
+        evidence:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+    SendMessageRequest:
+      type: object
+      additionalProperties: false
+      required: [content, clientMessageId]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        clientMessageId:
+          type: string
+          minLength: 8
+          maxLength: 64
+    SendMessageResponse:
+      type: object
+      additionalProperties: false
+      required: [userMessage, assistantMessage, toolCalls, items, usage]
+      properties:
+        userMessage:
+          $ref: '#/components/schemas/Message'
+        assistantMessage:
+          $ref: '#/components/schemas/Message'
         toolCalls:
           type: array
           items:
             $ref: '#/components/schemas/ToolCall'
+        items:
+          type: array
+          description: 本次消息创建或修改的事项
+          items:
+            $ref: '#/components/schemas/Item'
         usage:
           $ref: '#/components/schemas/Usage'
-    Todo:
+    Item:
       type: object
       additionalProperties: false
-      required: [id, title, status]
+      required: [id, threadId, kind, title, status, createdAt, updatedAt]
       properties:
         id:
           type: string
+        threadId:
+          type: string
+        kind:
+          type: string
+          enum: [reminder, todo]
         title:
           type: string
         dueAt:
@@ -238,15 +506,44 @@ components:
           format: date-time
         status:
           type: string
-          enum: [open, done]
+          enum: [open, done, deleted]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ItemsResponse:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Item'
+    UpdateItemRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        dueAt:
+          type: string
+          format: date-time
     ToolCall:
       type: object
       additionalProperties: false
-      required: [name, arguments, result, createdAt]
+      required: [id, name, arguments, result, createdAt]
       properties:
+        id:
+          type: string
         name:
           type: string
-          enum: [create_todo, create_reminder, search_history]
+          enum: [create_item, update_item, delete_item, complete_item, search_items, finish]
         arguments:
           type: object
           additionalProperties: true
@@ -259,7 +556,7 @@ components:
     Usage:
       type: object
       additionalProperties: false
-      required: [used, limit, date, resetsAt]
+      required: [used, limit, unlimited, date, resetsAt]
       properties:
         used:
           type: integer
@@ -267,30 +564,29 @@ components:
         limit:
           type: integer
           minimum: 1
+        unlimited:
+          type: boolean
         date:
           type: string
           format: date
         resetsAt:
           type: string
           format: date-time
-    NotesResponse:
-      type: object
-      additionalProperties: false
-      required: [notes]
-      properties:
-        notes:
-          type: array
-          items:
-            $ref: '#/components/schemas/Note'
     ErrorResponse:
       type: object
       additionalProperties: false
-      required: [code, message]
+      required: [code, message, requestId]
       properties:
         code:
           type: string
-          enum: [INVALID_INPUT, NOT_FOUND, QUOTA_EXCEEDED, INTERNAL]
+          enum: [INVALID_INPUT, INVALID_CREDENTIALS, UNAUTHORIZED, NOT_FOUND, QUOTA_EXCEEDED, INTERNAL]
           description: 机器可读的错误码，客户端按码做 UI 决策
         message:
           type: string
-          description: 人类可读的说明，不作为 UI 文案
+          description: 人类可读的诊断说明，不作为 UI 文案
+        details:
+          type: object
+          additionalProperties: true
+          description: 结构化错误信息，例如字段错误
+        requestId:
+          type: string

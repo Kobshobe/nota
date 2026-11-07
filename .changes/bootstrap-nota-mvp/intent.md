@@ -2,22 +2,23 @@
 
 ## Problem
 
-Nota 需要一个可真实体验的 MVP：用户按住说话或输入文字，AI 整理摘要与待办，并由 Agent 调工具创建待办、设置提醒、查询历史；Free 用户每天 10 次的额度必须在并发与重试下仍然准确。
+Nota 需要一个可真实体验的 MVP：用户输入一段文字（短命令或会议记录），AI 整理出摘要、重点和候选待办，并能在对话中创建、修改、删除、完成事项；Free 用户每天 10 次额度必须在并发和重试下准确。
 
 ## Expected outcome
 
-- Flutter 客户端一份代码构建 Web、iOS、Android；Web 满足必交项，App 提供加分项。
-- Node API 返回摘要、待办、工具轨迹和额度；额度超限返回 429。
-- README 能让人从零跑通，演示视频覆盖核心链路。
-- 硬件不在本期；以后用 Wokwi 或 ESP32 通过设备接口接入。
+- Flutter Web + iOS 共用一份代码；文字输入先跑通，语音 / ASR 留作扩展。
+- Fastify API + SQLite；JWT 无状态鉴权；DeepSeek 负责理解与工具调用。
+- Agent 用 `pi-agent-core` + `pi-ai`；工具执行有 staging 和 `finish` 提交，避免半成功。
+- 日常 thread 与会议 thread 分开；会议候选待办需用户确认。
+- 文档、契约、测试与实现一致；`make check-all` 全绿。
 
 ## Constraints
 
-- 48 小时交付窗口；先服务端，后客户端。
-- 后端 Node 22 + TypeScript + Fastify + SQLite；客户端 Flutter。
-- 语音在端上用 `speech_to_text` 转写，文本输入兜底；DeepSeek 只负责文本理解与工具调用。
-- 不引入登录、支付、真实硬件和水平扩展。
+- 产品范围见 [`docs/product.md`](../../docs/product.md)，架构见 [`docs/architecture.md`](../../docs/architecture.md)，工程约定见 [`docs/engineering.md`](../../docs/engineering.md)。
+- v1 文字输入；不做语音 / ASR、Android、硬件、真实日历、多端通知同步。
+- 消息同步处理；SSE / 异步任务为 P1。
+- 单次输入上限 20,000 字符；单条用户消息扣 1 次额度，按钮操作不扣。
 
 ## Open questions
 
-无。实现中遇到的新问题写进汇报，由协调者决定是否回填 spec。
+无阻塞问题。实现中发现的边界问题写进汇报，由协调者决定是否回填 spec。
