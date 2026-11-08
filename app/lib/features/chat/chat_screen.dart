@@ -167,9 +167,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
             ),
-            if (state != null)
+            if (state?.thread.kind == ThreadKind.meeting)
               Text(
-                '${state.thread.kind.label}对话',
+                '会议',
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w400,
