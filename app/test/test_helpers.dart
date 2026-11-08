@@ -58,6 +58,7 @@ class FakeApi implements NotaApi {
 
   ApiException? loginError;
   ApiException? sendError;
+  ApiException? usageError;
   bool failFirstSend = false;
   Completer<void>? sendGate;
   MessagePayload responsePayload = const MessagePayload(
@@ -123,7 +124,8 @@ class FakeApi implements NotaApi {
     final current = detail;
     if (current != null && current.thread.id == threadId) return current;
     for (final thread in threads) {
-      if (thread.id == threadId) return ThreadDetail(thread: thread, messages: const []);
+      if (thread.id != threadId) continue;
+      return ThreadDetail(thread: thread, messages: const []);
     }
     throw const ApiException(
       code: ApiErrorCode.notFound,
@@ -275,7 +277,10 @@ class FakeApi implements NotaApi {
   }
 
   @override
-  Future<Usage> getUsage() async => usage;
+  Future<Usage> getUsage() async {
+    if (usageError != null) throw usageError!;
+    return usage;
+  }
 }
 
 Widget testApp(
@@ -309,8 +314,10 @@ Widget testRoutedApp({
   required List<RouteBase> routes,
   String initialLocation = '/',
   FakeNotificationService? notifications,
+  AuthStore? authStore,
+  GoRouter? router,
 }) {
-  final store = AuthStore(MemoryTokenStorage());
+  final store = authStore ?? AuthStore(MemoryTokenStorage());
   return ProviderScope(
     overrides: [
       apiProvider.overrideWithValue(api),
@@ -325,7 +332,8 @@ Widget testRoutedApp({
       locale: const Locale('zh', 'CN'),
       supportedLocales: const [Locale('zh', 'CN')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      routerConfig: GoRouter(initialLocation: initialLocation, routes: routes),
+      routerConfig:
+          router ?? GoRouter(initialLocation: initialLocation, routes: routes),
     ),
   );
 }

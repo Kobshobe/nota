@@ -3,16 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/api.dart';
-import '../../core/auth_store.dart';
 import '../../core/theme.dart';
 import '../../shared/widgets/app_snack_bar.dart';
 import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/empty_view.dart';
-import '../../shared/widgets/quota_badge.dart';
 import '../chat/models.dart';
 import '../chat/threads_controller.dart';
-import '../chat/usage_controller.dart';
 import 'item_card.dart';
 import 'item_edit_dialog.dart';
 import 'items_controller.dart';
@@ -89,18 +86,6 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
     return null;
   }
 
-  Future<void> _logout() async {
-    final confirmed = await showConfirmDialog(
-      context,
-      title: '退出登录',
-      message: '退出后本机已安排的提醒会一并取消。',
-      confirmLabel: '退出',
-      destructive: true,
-    );
-    if (!confirmed || !mounted) return;
-    await ref.read(authStoreProvider).clear();
-  }
-
   Future<void> _complete(Item item) async {
     await _run(item.id, () async {
       await ref.read(itemsProvider.notifier).complete(item);
@@ -156,23 +141,15 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   @override
   Widget build(BuildContext context) {
     final items = ref.watch(itemsProvider);
-    final usage = ref.watch(usageProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('事项'),
         actions: [
-          if (usage.hasValue)
-            QuotaBadge(
-              used: usage.requireValue.used,
-              limit: usage.requireValue.limit,
-              unlimited: usage.requireValue.unlimited,
-            )
-          else
-            QuotaBadge.loading(),
           IconButton(
-            tooltip: '退出登录',
-            onPressed: _logout,
-            icon: const Icon(Icons.logout, size: 20),
+            key: const ValueKey('open-profile'),
+            tooltip: '我的',
+            onPressed: () => context.push('/profile'),
+            icon: const Icon(Icons.person_outline, size: 22),
           ),
           const SizedBox(width: 4),
         ],

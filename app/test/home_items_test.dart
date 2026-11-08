@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:nota/features/chat/chat_screen.dart';
+import 'package:nota/core/auth_store.dart';
+import 'package:nota/features/auth/models.dart';
 import 'package:nota/features/chat/models.dart';
 import 'package:nota/features/items/items_screen.dart';
-import 'package:nota/shared/widgets/quota_badge.dart';
 
 import 'test_helpers.dart';
 
@@ -23,10 +24,23 @@ void main() {
       threads: [daily],
       detail: ThreadDetail(thread: daily, messages: const []),
     );
+    api.usage = Usage(
+      used: 3,
+      limit: 10,
+      unlimited: true,
+      date: '2026-11-08',
+      resetsAt: DateTime.utc(2026, 11, 9),
+    );
+    final store = AuthStore(MemoryTokenStorage());
+    await store.save(
+      'token-1',
+      const NotaUser(email: 'vip1@nota.com', isVip: true),
+    );
 
     await tester.pumpWidget(
       testRoutedApp(
         api: api,
+        authStore: store,
         routes: [
           GoRoute(path: '/', builder: (context, state) => const ItemsScreen()),
           GoRoute(
@@ -46,11 +60,12 @@ void main() {
     // then：进入主对话，右上角是会议入口而不是额度徽标
     expect(find.text('日常'), findsOneWidget);
     expect(find.byKey(const ValueKey('start-meeting')), findsOneWidget);
-    // 额度徽标只在首页，对话页不该再出现（否则这条断言在 0/10 下会恒真）。
-    expect(find.byType(QuotaBadge), findsNothing);
+    // 额度已移到「我的」，对话页不该出现。
+    expect(find.textContaining('VIP'), findsNothing);
+    expect(find.text('0 / 10'), findsNothing);
   });
 
-  testWidgets('场景：首页 · 事项页显示额度并可以退出登录', (tester) async {
+  testWidgets('场景：首页 · 事项页不显示 VIP，右上角只有「我的」', (tester) async {
     final now = DateTime.now().toUtc();
     final daily = NotaThread(
       id: 'thread-daily',
@@ -60,10 +75,24 @@ void main() {
       updatedAt: now,
     );
     final api = FakeApi(threads: [daily]);
+    // 用 VIP + 不限次，确保「不出现 VIP」不是没数据导致的恒真。
+    api.usage = Usage(
+      used: 3,
+      limit: 10,
+      unlimited: true,
+      date: '2026-11-08',
+      resetsAt: DateTime.utc(2026, 11, 9),
+    );
+    final store = AuthStore(MemoryTokenStorage());
+    await store.save(
+      'token-1',
+      const NotaUser(email: 'vip1@nota.com', isVip: true),
+    );
 
     await tester.pumpWidget(
       testRoutedApp(
         api: api,
+        authStore: store,
         routes: [
           GoRoute(path: '/', builder: (context, state) => const ItemsScreen()),
         ],
@@ -71,8 +100,9 @@ void main() {
     );
     await pumpUntil(tester, find.text('事项'));
 
-    expect(find.byIcon(Icons.logout), findsOneWidget);
-    // 额度徽标从对话页挪到了首页
-    expect(find.text('0 / 10'), findsOneWidget);
+    expect(find.textContaining('VIP'), findsNothing);
+    expect(find.textContaining('3 / 10'), findsNothing);
+    expect(find.byIcon(Icons.logout), findsNothing);
+    expect(find.byKey(const ValueKey('open-profile')), findsOneWidget);
   });
 }

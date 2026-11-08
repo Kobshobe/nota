@@ -66,6 +66,7 @@ lib/
     chat/models.dart
     items/items_screen.dart
     items/item_card.dart
+    profile/profile_screen.dart
   shared/widgets/
     async_view.dart
     error_view.dart
@@ -100,7 +101,7 @@ lib/
 - `AsyncValueView`：loading / error / empty / data。
 - `ErrorView`、`EmptyView`。
 - `AppButton`、`AppTextField`、`ConfirmDialog`、`AppSnackBar`。
-- `SectionCard`、`ItemCard`、`MessageBubble`、`ToolCallTile`、`QuotaBadge`。
+- `SectionCard`、`ItemCard`、`MessageBubble`、`ToolCallTile`。
 
 组件只做展示；业务逻辑在 controller；不为了封装多一层。
 

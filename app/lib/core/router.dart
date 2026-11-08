@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/login_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/items/items_screen.dart';
+import '../features/profile/profile_screen.dart';
 import 'auth_store.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -45,6 +46,10 @@ final routerProvider = Provider<GoRouter>((ref) {
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(path: '/', builder: (context, state) => const ItemsScreen()),
+      GoRoute(
+        path: '/profile',
+        builder: (context, state) => const ProfileScreen(),
+      ),
       GoRoute(
         path: '/chat/:threadId',
         builder: (context, state) =>
