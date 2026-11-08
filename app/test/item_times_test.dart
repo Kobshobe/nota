@@ -86,6 +86,21 @@ void main() {
     expect(find.textContaining('截止 '), findsOneWidget);
   });
 
+  testWidgets('场景：事项卡片 · 执行时间与截止时间相同时只显示一条', (tester) async {
+    final at = DateTime.utc(2026, 11, 14, 9);
+    final todo = item(kind: ItemKind.todo, dueAt: at, scheduledAt: at);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(),
+        home: Scaffold(body: ItemCard(item: todo, onComplete: () {})),
+      ),
+    );
+
+    expect(find.textContaining('截止 '), findsOneWidget);
+    expect(find.textContaining('执行 '), findsNothing);
+  });
+
   testWidgets('场景：事项卡片 · 提醒只显示提醒时间', (tester) async {
     final reminder = item(
       kind: ItemKind.reminder,
@@ -99,7 +114,8 @@ void main() {
       ),
     );
 
-    expect(find.textContaining('提醒 '), findsOneWidget);
     expect(find.textContaining('截止 '), findsNothing);
+    expect(find.textContaining('执行 '), findsNothing);
+    expect(find.text('提醒'), findsOneWidget);
   });
 }

@@ -101,7 +101,7 @@ class ItemCard extends StatelessWidget {
                       ),
                       if (item.kind == ItemKind.reminder && item.dueAt != null)
                         Text(
-                          '提醒 ${formatDueAt(item.dueAt)}',
+                          formatDueAt(item.dueAt),
                           style: TextStyle(
                             fontSize: 12,
                             color: overdue ? AppColors.danger : AppColors.muted,
@@ -110,7 +110,10 @@ class ItemCard extends StatelessWidget {
                                 : FontWeight.w400,
                           ),
                         ),
-                      if (item.kind == ItemKind.todo && item.scheduledAt != null)
+                      if (item.kind == ItemKind.todo &&
+                          item.scheduledAt != null &&
+                          !(item.dueAt != null &&
+                              item.scheduledAt!.isAtSameMomentAs(item.dueAt!)))
                         Text(
                           '执行 ${formatDueAt(item.scheduledAt)}',
                           style: const TextStyle(
