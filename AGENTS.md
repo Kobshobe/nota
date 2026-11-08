@@ -62,18 +62,13 @@ make check-all   # 再加两端测试与运行时一致性
 - **语言与框架**：服务端 Node 22 + TypeScript + Fastify + SQLite（Drizzle）；客户端 Flutter（Riverpod + Dio）；Agent 用 pi-agent-core + pi-ai，模型 DeepSeek `deepseek-flash`。
 - **密钥与环境变量**：模型 key 只从 `.env` 读，提交 `.env.example`，绝不提交真实 key。
 
-## 当前任务：Nota 收尾
+## 多代理与合并
 
-目标：把 v1 从“能演示”推进到“可交付”，持续执行到清单为空；P1（语音、真实日历、批量确认、导出、重复提醒、自动识别会议）不在本次范围。
-
-清单：
-
-- 契约、服务端、客户端一致；真实 DeepSeek 全流程。
-- 额度：第 11 次、跨天重置、VIP、并发同 key 只扣一次。
-- 失败原子性、启动首帧、通知取消、候选状态、dueAt 清空、工具轨迹刷新。
-- README 300 字架构、Free 额度证明、干净副本从零启动。
-- 视频、Web/iOS 构建、无密钥、已 push。
-- 发现的新问题追加到清单，全部验证通过才停。
+- **并行写者必须各用一个 worktree。** 用 `wt switch -c feat/<slug>-<role>`；单写者小改才直接在 main 做。
+- **生产端先合，消费端从合并后的 main 重开。** 契约只有一个作者，消费方只读契约。
+- **非平凡变更合并前必须有独立 review 子代理。** 跨契约/数据/鉴权/Agent/并发/事务的改动都算；每个实现端至少一次，实现者不能自审，审查者只读，按 `file:line` 报 P0/P1/P2；P0 必修，P1 修复或记录延期，改动后复核。
+- **子代理不提交、不 push。** 协调者负责 review 分诊、提交、合并和 push。
+- **任务书单点。** 边界与验收写在 `.changes/<slug>/plan.md`；prompt 只说环境、禁令和汇报格式。
 
 ## 编辑本文件
 
