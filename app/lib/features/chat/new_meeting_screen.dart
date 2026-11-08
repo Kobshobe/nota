@@ -62,6 +62,7 @@ class _NewMeetingScreenState extends ConsumerState<NewMeetingScreen> {
 
     // 先清空，失败再还原，和主对话保持一致。
     _input.clear();
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() {
       _sending = true;
       _error = null;
@@ -151,43 +152,50 @@ class _NewMeetingScreenState extends ConsumerState<NewMeetingScreen> {
           ],
         ),
       ),
-      body: Column(
-        children: [
-          const Expanded(
-            child: EmptyView(
-              icon: Icons.groups_outlined,
-              title: '粘贴会议文字',
-              message: '把会议记录贴进来，Nota 会整理摘要、重点和候选事项。',
-            ),
-          ),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text(
-                _error!.userMessage,
-                style: const TextStyle(fontSize: 12.5, color: AppColors.danger),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: Column(
+          children: [
+            const Expanded(
+              child: EmptyView(
+                icon: Icons.groups_outlined,
+                title: '粘贴会议文字',
+                message: '把会议记录贴进来，Nota 会整理摘要、重点和候选事项。',
               ),
             ),
-          if (_sending)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 15,
-                    height: 15,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  _error!.userMessage,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.danger,
                   ),
-                  SizedBox(width: 8),
-                  Text(
-                    '整理中…',
-                    style: TextStyle(fontSize: 12.5, color: AppColors.muted),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ChatComposer(controller: _input, sending: _sending, onSend: _send),
-        ],
+            if (_sending)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    SizedBox(width: 8),
+                    Text(
+                      '整理中…',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+                    ),
+                  ],
+                ),
+              ),
+            ChatComposer(controller: _input, sending: _sending, onSend: _send),
+          ],
+        ),
       ),
     );
   }

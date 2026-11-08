@@ -57,6 +57,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
+  void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
@@ -73,6 +75,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (content.trim().isEmpty || content.length > maxMessageLength) return;
     // 先清空，失败再还原：AI 要几秒，等响应回来才清会像「发了但没清」。
     _inputController.clear();
+    // 发完收起键盘，别挡着回复。
+    FocusManager.instance.primaryFocus?.unfocus();
     final ok = await ref
         .read(chatProvider(widget.threadId).notifier)
         .send(content);
@@ -184,14 +188,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: chat.when(
-        loading: () =>
-            const Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
-        error: (error, stackTrace) => ErrorView(
-          message: error is ApiException ? error.userMessage : '加载失败，请重试',
-          onRetry: () => ref.invalidate(chatProvider(widget.threadId)),
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _dismissKeyboard,
+        child: chat.when(
+          loading: () =>
+              const Center(child: CircularProgressIndicator(strokeWidth: 2.4)),
+          error: (error, stackTrace) => ErrorView(
+            message: error is ApiException ? error.userMessage : '加载失败，请重试',
+            onRetry: () => ref.invalidate(chatProvider(widget.threadId)),
+          ),
+          data: (state) => _buildChat(state),
         ),
-        data: (state) => _buildChat(state),
       ),
     );
   }
@@ -223,6 +231,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     )
                   : ListView.builder(
                       controller: _scrollController,
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                       itemCount: entries.length,
                       itemBuilder: (context, index) {
