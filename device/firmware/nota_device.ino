@@ -189,6 +189,7 @@ bool readConfig() {
 bool httpPost(const String& url, std::vector<uint8_t>& body, String& response, int& code) {
   HTTPClient http;
   http.setTimeout(60000);
+  http.setConnectTimeout(30000);
   if (!http.begin(tls, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + deviceToken);
   http.addHeader("Content-Type", String("multipart/form-data; boundary=") + BOUNDARY);
@@ -208,6 +209,7 @@ bool httpPost(const String& url, std::vector<uint8_t>& body, String& response, i
 bool httpGet(const String& url, String& response, int& code) {
   HTTPClient http;
   http.setTimeout(15000);
+  http.setConnectTimeout(30000);
   if (!http.begin(tls, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + deviceToken);
   code = http.GET();
@@ -257,7 +259,7 @@ bool pollRecording() {
   return false;
 }
 
-bool sendRecording() {
+bool uploadRecording() {
   pendingId = "";
   String head = String("--") + BOUNDARY +
                 "\r\nContent-Disposition: form-data; name=\"durationMs\"\r\n\r\n" +
@@ -280,7 +282,16 @@ bool sendRecording() {
   Serial.println("upload: sending");
   String response;
   int code = 0;
-  if (!httpPost(baseUrl + "/api/device/recordings", body, response, code)) {
+  bool posted = false;
+  for (int attempt = 0; attempt < 3 && !posted; attempt += 1) {
+    if (attempt > 0) {
+      Serial.print("upload: retry ");
+      Serial.println(attempt);
+      delay(2000);
+    }
+    posted = httpPost(baseUrl + "/api/device/recordings", body, response, code);
+  }
+  if (!posted) {
     Serial.println("upload: request failed");
     return false;
   }
@@ -297,6 +308,12 @@ bool sendRecording() {
   }
   Serial.print("upload: id=");
   Serial.println(pendingId);
+  return true;
+}
+
+bool sendRecording() {
+  // body 在 uploadRecording 返回后释放，轮询时不再占着 90 KB 的音频缓冲。
+  if (!uploadRecording()) return false;
   return pollRecording();
 }
 
@@ -360,6 +377,28 @@ void triggerShortPress() {
   }
 }
 
+void probeConnection() {
+  String host = baseUrl;
+  host.replace("https://", "");
+  host.replace("http://", "");
+  int slash = host.indexOf('/');
+  if (slash >= 0) host = host.substring(0, slash);
+  IPAddress address;
+  int resolved = WiFi.hostByName(host.c_str(), address);
+  Serial.print("probe: dns=");
+  Serial.print(resolved);
+  Serial.print(" ip=");
+  Serial.println(address);
+  String response;
+  int code = 0;
+  const bool ok = httpGet(baseUrl + "/api/health", response, code);
+  Serial.print("probe: health=");
+  Serial.print(ok ? 1 : 0);
+  Serial.print(" code=");
+  Serial.println(code);
+  Serial.println(response);
+}
+
 void handleSerial() {
   while (Serial.available()) {
     char command = (char)Serial.read();
@@ -368,6 +407,8 @@ void handleSerial() {
       triggerShortPress();
     } else if (command == 'd' || command == 'D') {
       if (state == IDLE && hasPending) discardPending();
+    } else if (command == 't' || command == 'T') {
+      probeConnection();
     }
   }
 }

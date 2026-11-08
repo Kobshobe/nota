@@ -53,7 +53,7 @@
 ## 模拟器映射
 
 - Wokwi 免费网页版；工程内容在 [`firmware/diagram.json`](firmware/diagram.json) 和 [`firmware/nota_device.ino`](firmware/nota_device.ino)。
-- 串口先打印 `paste: <baseUrl> <token>`，粘一行后连接；之后按按钮或用串口 `s` 开始/结束，`d` 等同长按 2 秒放弃。
+- 串口先打印 `paste: <baseUrl> <token>`，粘一行后连接；之后按按钮或用串口 `s` 开始/结束，`d` 等同长按 2 秒放弃，`t` 打印 DNS 与健康检查结果。
 - 内嵌约 23 秒的双人会议对话作为 fixture；按下开始只切换到录音态并计时，结束才上传这段音频，所以 8 分钟上限在模拟器里不会触发。
 - 灯效、上传、轮询、失败重试都真实运行；转写和纪要走真实服务端。
 - HTTPS 用 `setInsecure()`，只用于本地隧道；token 只从串口注入，不写进固件；免费项目公开且走公共网关，token 和音频会经过 Wokwi，不放真实敏感内容。
