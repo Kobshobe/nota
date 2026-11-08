@@ -30,7 +30,7 @@ Flutter（Web / iOS）经 HTTP + JSON 调 Fastify API；API 用 pi-agent-core + 
 | `users` | id、email、password_hash |
 | `threads` | id、user_id、kind（daily / meeting）、title |
 | `messages` | id、thread_id、role、content、payload_json、client_message_id |
-| `items` | id、user_id、thread_id、kind、title、due_at、status |
+| `items` | id、user_id、thread_id、kind、title、due_at、scheduled_at、source_message_id、candidate_index、status |
 | `tool_calls` | id、message_id、name、arguments_json、result_json |
 | `usage_daily` | user_id、day、used |
 | `recordings` | id、user_id、status、audio_path、thread_id |

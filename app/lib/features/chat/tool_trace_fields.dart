@@ -11,7 +11,8 @@ class ToolTraceField {
 const _labels = <String, String>{
   'title': '标题',
   'kind': '类型',
-  'dueAt': '时间',
+  'dueAt': '截止时间',
+  'scheduledAt': '执行时间',
   'itemId': '事项',
   'tempId': '临时 ID',
   'query': '关键词',

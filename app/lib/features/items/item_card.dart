@@ -99,16 +99,36 @@ class ItemCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      Text(
-                        formatDueAt(item.dueAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: overdue ? AppColors.danger : AppColors.muted,
-                          fontWeight: overdue
-                              ? FontWeight.w600
-                              : FontWeight.w400,
+                      if (item.kind == ItemKind.reminder && item.dueAt != null)
+                        Text(
+                          '提醒 ${formatDueAt(item.dueAt)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: overdue ? AppColors.danger : AppColors.muted,
+                            fontWeight: overdue
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
                         ),
-                      ),
+                      if (item.kind == ItemKind.todo && item.scheduledAt != null)
+                        Text(
+                          '执行 ${formatDueAt(item.scheduledAt)}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.muted,
+                          ),
+                        ),
+                      if (item.kind == ItemKind.todo && item.dueAt != null)
+                        Text(
+                          '截止 ${formatDueAt(item.dueAt)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: overdue ? AppColors.danger : AppColors.muted,
+                            fontWeight: overdue
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
                       if (overdue)
                         const Text(
                           '已逾期',

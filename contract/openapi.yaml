@@ -237,6 +237,12 @@ paths:
       description: 音频在失败后保留 24 小时；重试复用已创建的会议，不会重复建会或扣额度。
       parameters:
         - $ref: '#/components/parameters/RecordingId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
       responses:
         '202':
           description: 已重新排队
@@ -438,6 +444,12 @@ paths:
       summary: 删除事项
       parameters:
         - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
       responses:
         '204':
           description: 已删除
@@ -452,6 +464,12 @@ paths:
       summary: 标记事项完成
       parameters:
         - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
       responses:
         '200':
           description: 已完成的事项
@@ -691,6 +709,11 @@ components:
         dueAt:
           type: string
           format: date-time
+          description: 截止时间
+        scheduledAt:
+          type: string
+          format: date-time
+          description: 执行时间；只有原文说了才带
         evidence:
           type: string
         confidence:
@@ -747,6 +770,11 @@ components:
         dueAt:
           type: string
           format: date-time
+          description: 截止时间；提醒里是通知时间
+        scheduledAt:
+          type: string
+          format: date-time
+          description: 执行时间（打算什么时候做）；只有用户或原文说了才存在
         sourceMessageId:
           type: string
         candidateIndex:
@@ -787,6 +815,11 @@ components:
         dueAt:
           type: string
           format: date-time
+          description: 截止时间；提醒里是通知时间
+        scheduledAt:
+          type: string
+          format: date-time
+          description: 执行时间（打算什么时候做）；只有用户或原文说了才存在
         sourceMessageId:
           type: string
         candidateIndex:
@@ -800,6 +833,8 @@ components:
             required: [kind]
           then:
             required: [dueAt]
+            not:
+              required: [scheduledAt]
         - dependentRequired:
             sourceMessageId: [candidateIndex]
             candidateIndex: [sourceMessageId]
@@ -813,6 +848,11 @@ components:
           minLength: 1
           maxLength: 200
         dueAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        scheduledAt:
           anyOf:
             - type: string
               format: date-time
@@ -901,6 +941,10 @@ components:
         createdAt:
           type: string
           format: date-time
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      description: 没有参数；客户端可以不带 body，或带一个空对象
     ErrorResponse:
       type: object
       additionalProperties: false

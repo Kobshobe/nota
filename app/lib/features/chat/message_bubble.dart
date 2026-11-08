@@ -311,7 +311,9 @@ class _CandidateActionCardState extends State<_CandidateActionCard> {
               ),
             ],
           ),
-          if (action.owner != null || action.dueAt != null) ...[
+          if (action.owner != null ||
+              action.dueAt != null ||
+              action.scheduledAt != null) ...[
             const SizedBox(height: 7),
             Wrap(
               spacing: 8,
@@ -319,10 +321,15 @@ class _CandidateActionCardState extends State<_CandidateActionCard> {
               children: [
                 if (action.owner != null)
                   _MetaChip(icon: Icons.person_outline, text: action.owner!),
+                if (action.scheduledAt != null)
+                  _MetaChip(
+                    icon: Icons.play_circle_outline,
+                    text: '执行 ${formatDueAt(action.scheduledAt)}',
+                  ),
                 if (action.dueAt != null)
                   _MetaChip(
                     icon: Icons.schedule,
-                    text: formatDueAt(action.dueAt),
+                    text: '截止 ${formatDueAt(action.dueAt)}',
                   ),
               ],
             ),

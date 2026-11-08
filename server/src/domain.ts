@@ -15,7 +15,10 @@ export type ToolName =
 export interface CandidateAction {
   title: string;
   owner?: string;
+  /** 截止时间：这件事必须在此之前完成。 */
   dueAt?: string;
+  /** 执行时间：打算什么时候做；只有原文说了才算。 */
+  scheduledAt?: string;
   evidence?: string;
   confidence?: number;
 }

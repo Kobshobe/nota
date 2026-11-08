@@ -32,6 +32,7 @@ export interface ItemDto {
   kind: 'reminder' | 'todo';
   title: string;
   dueAt?: string;
+  scheduledAt?: string;
   sourceMessageId?: string;
   candidateIndex?: number;
   status: ItemStatus;
@@ -72,6 +73,7 @@ export function toItemDto(row: ItemRow): ItemDto {
     updatedAt: row.updatedAt,
   };
   if (row.dueAt) dto.dueAt = row.dueAt;
+  if (row.scheduledAt) dto.scheduledAt = row.scheduledAt;
   if (row.sourceMessageId) dto.sourceMessageId = row.sourceMessageId;
   if (row.candidateIndex !== null) dto.candidateIndex = row.candidateIndex;
   return dto;
@@ -128,6 +130,7 @@ function sanitizeAction(value: unknown): CandidateAction | undefined {
   const action: CandidateAction = { title: value.title };
   if (typeof value.owner === 'string') action.owner = value.owner;
   if (typeof value.dueAt === 'string') action.dueAt = value.dueAt;
+  if (typeof value.scheduledAt === 'string') action.scheduledAt = value.scheduledAt;
   if (typeof value.evidence === 'string') action.evidence = value.evidence;
   if (typeof value.confidence === 'number') action.confidence = value.confidence;
   return action;

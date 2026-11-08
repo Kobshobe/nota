@@ -35,7 +35,7 @@ class AppNotificationService {
   }
 
   Future<void> schedule(Item item) async {
-    final dueAt = item.dueAt;
+    final dueAt = item.notificationAt;
     if (dueAt == null || item.status != ItemStatus.open) {
       await cancel(item.id);
       return;

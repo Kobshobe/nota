@@ -762,3 +762,53 @@ describe('场景：Agent · 历史消息保留纪要上下文', () => {
     expect(history.length).toBeLessThanOrEqual(4000);
   });
 });
+
+
+describe('场景：Agent · 执行时间', () => {
+  it('create_item 带上 scheduledAt，finish 的候选也能带执行时间', async () => {
+    const ctx = await createTestApp();
+    try {
+      const auth = await login(ctx);
+      ctx.faux.setResponses([
+        finishWith(
+          [
+            {
+              name: 'create_item',
+              args: {
+                title: '改原型',
+                kind: 'todo',
+                dueAt: '2026-11-13T23:59:00+08:00',
+                scheduledAt: '2026-11-12T09:30:00+08:00',
+              },
+            },
+          ],
+          {
+            reply: '已记录',
+            actions: [
+              {
+                title: '周五前给报价单',
+                dueAt: '2026-11-13T23:59:00+08:00',
+                scheduledAt: '2026-11-12T10:00:00+08:00',
+              },
+            ],
+          },
+        ),
+      ]);
+
+      const response = await sendMessage(ctx, auth.token, '记一下：改原型，12 号上午九点半开始，13 号前交');
+
+      expect(response.status).toBe(200);
+      expect(response.body.items[0]).toMatchObject({
+        title: '改原型',
+        dueAt: '2026-11-13T15:59:00.000Z',
+        scheduledAt: '2026-11-12T01:30:00.000Z',
+      });
+      expect(response.body.assistantMessage.payload.actions[0]).toMatchObject({
+        title: '周五前给报价单',
+        scheduledAt: '2026-11-12T10:00:00+08:00',
+      });
+    } finally {
+      await ctx.close();
+    }
+  });
+});

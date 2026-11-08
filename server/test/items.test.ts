@@ -55,6 +55,90 @@ describe('场景：事项 · 直接创建与校验', () => {
     expect(usage.body.used).toBe(0);
   });
 
+  it('待办可以同时有截止时间和执行时间，执行时间能单独清除', async () => {
+    // when
+    const created = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'todo',
+        title: '给张总报价单',
+        dueAt: '2026-11-11T23:59:00+08:00',
+        scheduledAt: '2026-11-10T09:30:00+08:00',
+      },
+    });
+
+    // then：两个时间都按 UTC 存
+    expect(created.status).toBe(201);
+    expect(created.body.dueAt).toBe('2026-11-11T15:59:00.000Z');
+    expect(created.body.scheduledAt).toBe('2026-11-10T01:30:00.000Z');
+
+    // when：只清执行时间
+    const cleared = await call(ctx, {
+      method: 'PATCH',
+      url: `/api/items/${created.body.id}`,
+      token,
+      payload: { scheduledAt: null },
+    });
+
+    // then：截止时间还在
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.scheduledAt).toBeUndefined();
+    expect(cleared.body.dueAt).toBe('2026-11-11T15:59:00.000Z');
+  });
+
+  it('complete / delete 接受空对象 body（Dio 默认带 application/json）', async () => {
+    const created = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: { threadId, kind: 'todo', title: '写周报' },
+    });
+
+    // when：带 content-type: application/json 和一个空对象
+    const payload = '{}';
+    const done = await ctx.app.inject({
+      method: 'POST',
+      url: `/api/items/${created.body.id}/complete`,
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      payload,
+    });
+    expect(done.statusCode).toBe(200);
+
+    const created2 = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: { threadId, kind: 'todo', title: '删掉这条' },
+    });
+    const removed = await ctx.app.inject({
+      method: 'DELETE',
+      url: `/api/items/${created2.body.id}`,
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      payload,
+    });
+    expect(removed.statusCode).toBe(204);
+  });
+
+  it('提醒不接受执行时间', async () => {
+    const response = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'reminder',
+        title: '开会',
+        dueAt: '2026-11-09T10:00:00+08:00',
+        scheduledAt: '2026-11-09T09:30:00+08:00',
+      },
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('INVALID_INPUT');
+  });
+
   it('reminder 必须有 dueAt，dueAt 统一存 UTC', async () => {
     // when：缺少 dueAt
     const missing = await call(ctx, {
