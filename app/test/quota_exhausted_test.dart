@@ -43,7 +43,6 @@ void main() {
     await pumpUntil(tester, find.textContaining('今日额度已用完'));
 
     expect(find.textContaining('重置'), findsOneWidget);
-    expect(find.text('10 / 10'), findsOneWidget);
     expect(find.text('重试'), findsNothing);
 
     final input = tester.widget<TextField>(

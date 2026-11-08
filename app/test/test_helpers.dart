@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:nota/core/api.dart';
 import 'package:nota/core/auth_store.dart';
 import 'package:nota/core/notifications.dart';
@@ -109,7 +110,7 @@ class FakeApi implements NotaApi {
     final thread = NotaThread(
       id: 'thread-${threads.length + 1}',
       kind: ThreadKind.meeting,
-      title: title ?? '',
+      title: title ?? '新会议',
       createdAt: now,
       updatedAt: now,
     );
@@ -120,14 +121,15 @@ class FakeApi implements NotaApi {
   @override
   Future<ThreadDetail> getThread(String threadId) async {
     final current = detail;
-    if (current == null || current.thread.id != threadId) {
-      throw const ApiException(
-        code: ApiErrorCode.notFound,
-        message: 'Thread not found',
-        statusCode: 404,
-      );
+    if (current != null && current.thread.id == threadId) return current;
+    for (final thread in threads) {
+      if (thread.id == threadId) return ThreadDetail(thread: thread, messages: const []);
     }
-    return current;
+    throw const ApiException(
+      code: ApiErrorCode.notFound,
+      message: 'Thread not found',
+      statusCode: 404,
+    );
   }
 
   @override
@@ -297,6 +299,33 @@ Widget testApp(
       supportedLocales: const [Locale('zh', 'CN')],
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       home: screen,
+    ),
+  );
+}
+
+/// 需要真实跳转的测试用这个：Routes 由调用方给，其余装配与 [testApp] 一致。
+Widget testRoutedApp({
+  required FakeApi api,
+  required List<RouteBase> routes,
+  String initialLocation = '/',
+  FakeNotificationService? notifications,
+}) {
+  final store = AuthStore(MemoryTokenStorage());
+  return ProviderScope(
+    overrides: [
+      apiProvider.overrideWithValue(api),
+      authStoreProvider.overrideWithValue(store),
+      notificationServiceProvider.overrideWithValue(
+        notifications ?? FakeNotificationService(),
+      ),
+    ],
+    child: MaterialApp.router(
+      debugShowCheckedModeBanner: false,
+      theme: buildTheme(),
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [Locale('zh', 'CN')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      routerConfig: GoRouter(initialLocation: initialLocation, routes: routes),
     ),
   );
 }

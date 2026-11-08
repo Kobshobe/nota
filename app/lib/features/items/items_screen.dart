@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/api.dart';
+import '../../core/auth_store.dart';
 import '../../core/theme.dart';
 import '../../shared/widgets/app_snack_bar.dart';
 import '../../shared/widgets/async_view.dart';
 import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/empty_view.dart';
+import '../../shared/widgets/quota_badge.dart';
+import '../chat/models.dart';
+import '../chat/threads_controller.dart';
+import '../chat/usage_controller.dart';
 import 'item_card.dart';
 import 'item_edit_dialog.dart';
 import 'items_controller.dart';
@@ -21,6 +27,79 @@ class ItemsScreen extends ConsumerStatefulWidget {
 
 class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   final Set<String> _busy = {};
+  bool _openingChat = false;
+
+  /// 首页只有一个入口：主对话（服务端已有的 daily thread）。
+  Future<void> _openDailyChat() async {
+    if (_openingChat) return;
+    setState(() => _openingChat = true);
+    try {
+      final thread = await _dailyThread();
+      if (!mounted) return;
+      if (thread == null) {
+        AppSnackBar.show(context, '还没准备好对话，请稍后再试', isError: true);
+        return;
+      }
+      context.push('/chat/${thread.id}');
+    } on ApiException catch (error) {
+      if (mounted) {
+        AppSnackBar.show(context, error.userMessage, isError: true);
+      }
+    } catch (_) {
+      if (mounted) {
+        AppSnackBar.show(context, '加载对话失败，请重试', isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _openingChat = false);
+    }
+  }
+
+  Future<NotaThread?> _dailyThread() async {
+    // 首次进入时等 build 完成；已经处于错误态时 .future 会直接抛，交给下面的刷新重试。
+    var threads = const <NotaThread>[];
+    try {
+      threads = await ref.read(threadsProvider.future);
+    } catch (_) {
+      // 忽略，下面刷新一次再判断。
+    }
+    final cached = _findDaily(threads);
+    if (cached != null) return cached;
+
+    // 列表只剩会议或上次刷新失败：补一次完整刷新。
+    await ref.read(threadsProvider.notifier).refresh();
+    final refreshed = _findDaily(
+      ref.read(threadsProvider).value ?? const <NotaThread>[],
+    );
+    if (refreshed != null) return refreshed;
+
+    final error = ref.read(threadsProvider).error;
+    throw error is ApiException
+        ? error
+        : const ApiException(
+            code: ApiErrorCode.network,
+            message: '对话列表加载失败',
+            retryable: true,
+          );
+  }
+
+  NotaThread? _findDaily(List<NotaThread> threads) {
+    for (final thread in threads) {
+      if (thread.kind == ThreadKind.daily) return thread;
+    }
+    return null;
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showConfirmDialog(
+      context,
+      title: '退出登录',
+      message: '退出后本机已安排的提醒会一并取消。',
+      confirmLabel: '退出',
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await ref.read(authStoreProvider).clear();
+  }
 
   Future<void> _complete(Item item) async {
     await _run(item.id, () async {
@@ -77,8 +156,44 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   @override
   Widget build(BuildContext context) {
     final items = ref.watch(itemsProvider);
+    final usage = ref.watch(usageProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('事项')),
+      appBar: AppBar(
+        title: const Text('事项'),
+        actions: [
+          if (usage.hasValue)
+            QuotaBadge(
+              used: usage.requireValue.used,
+              limit: usage.requireValue.limit,
+              unlimited: usage.requireValue.unlimited,
+            )
+          else
+            QuotaBadge.loading(),
+          IconButton(
+            tooltip: '退出登录',
+            onPressed: _logout,
+            icon: const Icon(Icons.logout, size: 20),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        key: const ValueKey('open-daily'),
+        onPressed: _openingChat ? null : _openDailyChat,
+        backgroundColor: AppColors.ink,
+        foregroundColor: AppColors.surface,
+        icon: _openingChat
+            ? const SizedBox(
+                width: 17,
+                height: 17,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppColors.surface,
+                ),
+              )
+            : const Icon(Icons.chat_bubble_outline, size: 19),
+        label: const Text('对话'),
+      ),
       body: AsyncView<List<Item>>(
         value: items,
         onRetry: () => ref.read(itemsProvider.notifier).refresh(),
@@ -133,7 +248,7 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
           onRefresh: () => ref.read(itemsProvider.notifier).refresh(),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
               _SectionHeader(
                 title: '未完成',

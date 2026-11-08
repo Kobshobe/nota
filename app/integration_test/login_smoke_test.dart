@@ -17,7 +17,7 @@ const String _password = String.fromEnvironment(
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('场景：登录冒烟 · 真实后端登录后进入对话页', (tester) async {
+  testWidgets('场景：登录冒烟 · 真实后端登录后进入事项首页', (tester) async {
     // main() 会换掉 ErrorWidget.builder；测试框架在用例结束时校验，必须原地还原。
     final errorBuilder = ErrorWidget.builder;
     try {
@@ -25,7 +25,7 @@ void main() {
       await app.main();
       final start = await _waitForAny(tester, [
         find.byKey(const ValueKey('login-email')),
-        find.text('日常'),
+        find.byKey(const ValueKey('open-daily')),
       ]);
 
       // when：还停在登录页就登录；已有会话（keychain 可用）直接用
@@ -41,13 +41,13 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('login-submit')));
       }
 
-      // then：进入对话列表；模拟器没有 keychain 时也必须能进
+      // then：进入事项首页；模拟器没有 keychain 时也必须能进
       await _pumpUntil(
         tester,
-        find.text('日常'),
+        find.byKey(const ValueKey('open-daily')),
         timeout: const Duration(seconds: 30),
       );
-      expect(find.text('日常'), findsWidgets);
+      expect(find.text('事项'), findsWidgets);
     } finally {
       ErrorWidget.builder = errorBuilder;
     }
@@ -67,7 +67,7 @@ Future<int> _waitForAny(
       if (finders[index].evaluate().isNotEmpty) return index;
     }
   }
-  fail('启动后既没有登录页也没有对话列表');
+  fail('启动后既没有登录页也没有事项首页');
 }
 
 Future<void> _pumpUntil(

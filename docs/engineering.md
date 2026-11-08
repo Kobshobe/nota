@@ -61,7 +61,6 @@ lib/
     theme.dart
   features/
     auth/login_screen.dart
-    chat/threads_screen.dart
     chat/chat_screen.dart
     chat/chat_controller.dart
     chat/models.dart

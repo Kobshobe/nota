@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api.dart';
@@ -26,8 +28,13 @@ class ThreadsController extends AsyncNotifier<List<NotaThread>> {
 
   Future<NotaThread> createMeeting({String? title}) async {
     final thread = await ref.read(apiProvider).createThread(title: title);
-    final current = state.value ?? const <NotaThread>[];
-    state = AsyncData([thread, ...current]);
+    final current = state.value;
+    if (current == null) {
+      // 列表还没加载好：别用「只有会议」的列表覆盖，后台补一次完整列表。
+      unawaited(refresh());
+    } else {
+      state = AsyncData([thread, ...current]);
+    }
     return thread;
   }
 }

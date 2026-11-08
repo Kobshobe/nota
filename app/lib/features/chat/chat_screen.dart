@@ -8,12 +8,12 @@ import '../../core/theme.dart';
 import '../../shared/widgets/app_snack_bar.dart';
 import '../../shared/widgets/empty_view.dart';
 import '../../shared/widgets/error_view.dart';
-import '../../shared/widgets/quota_badge.dart';
+import '../../shared/format.dart';
 import '../items/models.dart';
 import 'chat_controller.dart';
 import 'message_bubble.dart';
 import 'models.dart';
-import 'usage_controller.dart';
+import 'threads_controller.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.threadId});
@@ -27,6 +27,34 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+  bool _creatingMeeting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // 会议卡片可能在上一个页面之后才有变化，进对话时刷新一次。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(threadsProvider.notifier).refresh();
+    });
+  }
+
+  /// 主对话右上角的会议入口：不填标题，服务端用默认「新会议」。
+  Future<void> _startMeeting() async {
+    if (_creatingMeeting) return;
+    setState(() => _creatingMeeting = true);
+    try {
+      final thread = await ref.read(threadsProvider.notifier).createMeeting();
+      if (!mounted) return;
+      context.push('/chat/${thread.id}');
+    } on ApiException catch (error) {
+      if (mounted) {
+        AppSnackBar.show(context, error.userMessage, isError: true);
+      }
+    } finally {
+      if (mounted) setState(() => _creatingMeeting = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -105,7 +133,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   Widget build(BuildContext context) {
     final chat = ref.watch(chatProvider(widget.threadId));
-    final usage = ref.watch(usageProvider);
     final state = chat.value;
 
     ref.listen(chatProvider(widget.threadId), (previous, next) {
@@ -150,15 +177,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ],
         ),
         actions: [
-          if (usage.hasValue)
-            QuotaBadge(
-              used: usage.requireValue.used,
-              limit: usage.requireValue.limit,
-              unlimited: usage.requireValue.unlimited,
-            )
-          else
-            QuotaBadge.loading(),
-          const SizedBox(width: 12),
+          if (state?.thread.kind == ThreadKind.daily)
+            IconButton(
+              key: const ValueKey('start-meeting'),
+              tooltip: '新建会议',
+              onPressed: _creatingMeeting ? null : _startMeeting,
+              icon: _creatingMeeting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.call_outlined, size: 22),
+            ),
+          const SizedBox(width: 8),
         ],
       ),
       body: chat.when(
@@ -180,6 +212,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Column(
       children: [
+        if (state.thread.kind == ThreadKind.daily) const _MeetingCards(),
         Expanded(
           child: Center(
             child: ConstrainedBox(
@@ -405,6 +438,102 @@ class _ErrorBanner extends StatelessWidget {
             icon: const Icon(Icons.close, size: 17, color: AppColors.danger),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 主对话里的会议入口：最近几场会议，点卡片回到那场会议。
+class _MeetingCards extends ConsumerWidget {
+  const _MeetingCards();
+
+  static const _maxShown = 5;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final threads = ref.watch(threadsProvider).value ?? const <NotaThread>[];
+    final meetings = threads
+        .where((thread) => thread.kind == ThreadKind.meeting)
+        .take(_maxShown)
+        .toList();
+    if (meetings.isEmpty) return const SizedBox.shrink();
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 860),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '最近会议',
+                style: TextStyle(fontSize: 12.5, color: AppColors.muted),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var index = 0; index < meetings.length; index++) ...[
+                      if (index > 0) const SizedBox(width: 8),
+                      _MeetingCard(thread: meetings[index]),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MeetingCard extends StatelessWidget {
+  const _MeetingCard({required this.thread});
+
+  final NotaThread thread;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        key: ValueKey('meeting-card-${thread.id}'),
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => context.push('/chat/${thread.id}'),
+        child: Container(
+          width: 188,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                thread.title.trim().isEmpty ? '未命名会议' : thread.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.ink,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                formatThreadTime(thread.updatedAt),
+                style: const TextStyle(fontSize: 11.5, color: AppColors.muted),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

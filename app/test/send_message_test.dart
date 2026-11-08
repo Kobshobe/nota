@@ -44,7 +44,6 @@ void main() {
     await pumpUntil(tester, find.text('已记录'));
 
     expect(find.text('记一下明天买牛奶'), findsOneWidget);
-    expect(find.text('1 / 10'), findsOneWidget);
     expect(api.sends, hasLength(1));
     expect(api.sends.single.content, '记一下明天买牛奶');
     expect(api.sends.single.clientMessageId.length, greaterThanOrEqualTo(8));
