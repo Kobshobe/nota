@@ -40,9 +40,10 @@ class DeviceMeetingRecorder implements MeetingRecorder {
   Future<void> start() async {
     final path = await _newRecordingPath();
     await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.aacLc,
-        sampleRate: 16000,
+      // 浏览器只稳定支持 webm/opus；iOS 直接录 m4a。
+      RecordConfig(
+        encoder: kIsWeb ? AudioEncoder.opus : AudioEncoder.aacLc,
+        sampleRate: kIsWeb ? 48000 : 16000,
         bitRate: 64000,
         numChannels: 1,
       ),
@@ -51,7 +52,8 @@ class DeviceMeetingRecorder implements MeetingRecorder {
   }
 
   Future<String> _newRecordingPath() async {
-    final name = 'meeting-${DateTime.now().millisecondsSinceEpoch}.m4a';
+    final extension = kIsWeb ? 'webm' : 'm4a';
+    final name = 'meeting-${DateTime.now().millisecondsSinceEpoch}.$extension';
     if (kIsWeb) return name;
     final dir = await getTemporaryDirectory();
     return '${dir.path}/$name';

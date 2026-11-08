@@ -35,6 +35,7 @@ export interface AppConfig {
   recordingMaxBytes: number;
   recordingRetentionHours: number;
   recordingsPath: string;
+  ffmpegPath: string;
   logLevel: LogLevel;
   logFormat: LogFormat;
 }
@@ -82,6 +83,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     'RECORDING_RETENTION_HOURS',
   );
   const recordingsPath = path.resolve(root, env.RECORDINGS_PATH?.trim() || './data/recordings');
+  const ffmpegPath = env.FFMPEG_PATH?.trim() || 'ffmpeg';
 
   const logLevel = (env.LOG_LEVEL?.trim() || 'info') as LogLevel;
   if (!LOG_LEVELS.includes(logLevel)) {
@@ -110,6 +112,7 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     recordingMaxBytes,
     recordingRetentionHours,
     recordingsPath,
+    ffmpegPath,
     logLevel,
     logFormat,
   };

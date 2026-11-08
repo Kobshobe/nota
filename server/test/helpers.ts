@@ -35,6 +35,8 @@ export interface TestAppOptions {
   transcript?: Transcript | null;
   /** 完全自定义转写，优先级高于 transcript。 */
   transcribe?: (filePath: string) => Promise<Transcript>;
+  /** 覆盖音频准备（转码）步骤；默认原样返回。 */
+  prepareAudio?: (filePath: string) => Promise<string>;
 }
 
 export const DEFAULT_TRANSCRIPT: Transcript = {
@@ -69,6 +71,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     recordingMaxBytes: 12 * 1024 * 1024,
     recordingRetentionHours: 24,
     recordingsPath: path.join(dir, 'recordings'),
+    ffmpegPath: 'ffmpeg',
     logLevel: 'silent',
     logFormat: 'json',
   };
@@ -87,6 +90,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     config,
     databasePath,
     runtime,
+    prepareAudio: options.prepareAudio ?? (async (filePath) => filePath),
     transcribeAudio:
       options.transcribe ??
       (async () => {

@@ -42,6 +42,7 @@ Flutter 客户端（Web / iOS）通过 HTTP + JSON 调用 Fastify API；API 内�
 
 - **新增工具**：注册 `AgentTool`，同步契约里的 `ToolCall.name` 枚举。
 - **换转写供应商**：`server/src/asr/` 是唯一适配器，替换 `transcribeAudio` 装饰即可，Agent 与契约不变。
+- **Web 录音格式**：浏览器录 webm/opus，服务端用 ffmpeg 转 m4a 后转写。
 - **流式**：订阅 pi-agent 事件并映射 SSE；v1 先同步。
 - **硬件**：设备 token 调 `/device/utterances`，复用 Agent 与额度。
 

@@ -29,7 +29,7 @@ Widget recorderApp({
       ),
       meetingRecorderProvider.overrideWithValue(recorder),
       recordingBytesProvider.overrideWithValue(
-        (_) async => Uint8List.fromList([1, 2, 3]),
+        (_) async => Uint8List(2048),
       ),
     ],
   );
@@ -113,7 +113,7 @@ void main() {
 
     // then：音频只上传一次，时长为录音时长
     expect(api.uploadCalls, 1);
-    expect(api.lastUploadBytes, [1, 2, 3]);
+    expect(api.lastUploadBytes?.length, 2048);
     expect(api.lastUploadDuration, const Duration(seconds: 1));
   });
 

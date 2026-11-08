@@ -19,9 +19,10 @@ import {
   notFound,
   payloadTooLarge,
   transcriptionFailed,
+  unsupportedAudio,
 } from './lib/errors';
 import { formatTranscript } from './asr/transcript';
-import { audioMimeType } from './asr/minimax';
+import { isKnownAudio } from './asr/audio';
 import { sendMessageCore } from './messages';
 
 /** 同一条录音同一时刻只跑一个任务。 */
@@ -60,7 +61,9 @@ export function registerRecordingRoutes(app: FastifyInstance): void {
       const extension = path.extname(file.filename).toLowerCase();
       const audioPath = path.join(app.config.recordingsPath, `${id}${extension}`);
       // 先按扩展名校验格式，避免把不支持的容器写进磁盘。
-      audioMimeType(audioPath);
+      if (!isKnownAudio(audioPath)) {
+        throw unsupportedAudio(`Unsupported audio format: ${extension || 'unknown'}`);
+      }
 
       let audio: Buffer;
       try {
@@ -80,6 +83,15 @@ export function registerRecordingRoutes(app: FastifyInstance): void {
       await mkdir(app.config.recordingsPath, { recursive: true });
       await writeFile(audioPath, audio);
 
+      // Web 录出来的是 webm，转成 m4a 再存；失败时别把原件留在磁盘上。
+      let storedPath: string;
+      try {
+        storedPath = await app.prepareAudio(audioPath);
+      } catch (error) {
+        await rm(audioPath, { force: true });
+        throw error;
+      }
+
       const now = app.now().toISOString();
       const row: RecordingRow = {
         id,
@@ -88,7 +100,7 @@ export function registerRecordingRoutes(app: FastifyInstance): void {
         mimeType: file.mimetype || 'application/octet-stream',
         sizeBytes: audio.length,
         durationMs: durationMs ?? null,
-        audioPath,
+        audioPath: storedPath,
         transcriptJson: null,
         threadId: null,
         errorCode: null,

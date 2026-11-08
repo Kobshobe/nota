@@ -131,6 +131,7 @@ server/src/
   items.ts      事项增删改完成
   usage.ts      额度
   recordings.ts 录音上传/状态/重试与转写任务
+  asr/audio.ts       容器校验与 webm→m4a 转码（需要 ffmpeg）
   asr/minimax.ts     MiniMax 转写适配
   asr/transcript.ts  逐句转写合并成说话人全文
   agent/

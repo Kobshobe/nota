@@ -12,6 +12,7 @@ declare module 'fastify' {
     runtime: AgentRuntime;
     now: () => Date;
     transcribeAudio: (filePath: string) => Promise<Transcript>;
+    prepareAudio: (filePath: string) => Promise<string>;
     authenticate: (
       request: import('fastify').FastifyRequest,
       reply: import('fastify').FastifyReply,

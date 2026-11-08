@@ -21,6 +21,7 @@ import {
 import { verifyJwt } from './lib/jwt';
 import { createDeepSeekRuntime, type AgentRuntime } from './agent/runtime';
 import { transcribeAudio as runTranscription, type Transcript } from './asr/minimax';
+import { prepareAudio as prepareAudioFile } from './asr/audio';
 import { transcriptionFailed } from './lib/errors';
 import { registerAuthRoutes } from './auth';
 import { registerThreadRoutes } from './threads';
@@ -35,6 +36,7 @@ export interface BuildAppOptions {
   databasePath?: string;
   runtime?: AgentRuntime;
   transcribeAudio?: (filePath: string) => Promise<Transcript>;
+  prepareAudio?: (filePath: string) => Promise<string>;
   now?: () => Date;
   logger?: FastifyServerOptions['logger'];
 }
@@ -57,6 +59,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         filePath,
       });
     });
+  const prepareAudio =
+    options.prepareAudio ??
+    ((filePath: string) => prepareAudioFile(filePath, { ffmpegPath: config.ffmpegPath }));
   const now = options.now ?? (() => new Date());
 
   const app = Fastify({
@@ -72,6 +77,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('sqlite', sqlite);
   app.decorate('runtime', runtime);
   app.decorate('transcribeAudio', transcribeAudio);
+  app.decorate('prepareAudio', prepareAudio);
   app.decorate('now', now);
   app.decorate('authenticate', async (request) => {
     await verifyJwt(request);

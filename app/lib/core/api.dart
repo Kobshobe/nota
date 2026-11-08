@@ -512,7 +512,11 @@ class ApiClient implements NotaApi {
   @override
   Future<Recording> retryRecording(String recordingId) {
     return _request(
-      () => _dio.post<dynamic>('/api/recordings/$recordingId/retry'),
+      () => _dio.post<dynamic>(
+        '/api/recordings/$recordingId/retry',
+        // 空 body 配 application/json 会被 Fastify 判成 400，显式给一个对象。
+        data: const <String, dynamic>{},
+      ),
       (data) => Recording.fromJson(data as Map<String, dynamic>),
     );
   }

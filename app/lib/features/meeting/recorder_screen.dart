@@ -192,6 +192,16 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
       }
 
       final bytes = await ref.read(recordingBytesProvider)(path);
+      if (bytes.length < 1024) {
+        // 浏览器偶尔会给出只有容器头的空录音，直接当「没录到声音」。
+        await discardRecording(path);
+        setState(() {
+          _phase = _Phase.failed;
+          _failureCode = 'TRANSCRIPTION_FAILED';
+          _failureMessage = '没有录到声音，检查麦克风后重试';
+        });
+        return;
+      }
       _pendingPath = path;
       _pendingBytes = bytes;
       await _uploadAndPoll(generation);
@@ -230,7 +240,7 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
       final api = ref.read(apiProvider);
       final recording = await api.uploadRecording(
         bytes: bytes,
-        filename: 'meeting.m4a',
+        filename: kIsWeb ? 'meeting.webm' : 'meeting.m4a',
         duration: _elapsed,
         onProgress: (sent, total) {
           if (mounted && total > 0) {

@@ -206,9 +206,45 @@ describe('场景：会议录音 → 纪要', () => {
     ctx = await createTestApp();
     const auth = await login(ctx);
 
-    const response = await upload(ctx, auth.token, 'meeting.webm');
+    const response = await upload(ctx, auth.token, 'meeting.txt');
     expect(response.status).toBe(415);
     expect(response.body.code).toBe('INVALID_INPUT');
+  });
+
+  it('webm 先转码成 m4a 再转写', async () => {
+    const seen: string[] = [];
+    const transcoded: string[] = [];
+    ctx = await createTestApp({
+      prepareAudio: async (filePath) => {
+        seen.push(filePath);
+        return filePath.replace(/\.webm$/, '.m4a');
+      },
+      transcribe: async (filePath) => {
+        transcoded.push(filePath);
+        return DEFAULT_TRANSCRIPT;
+      },
+    });
+    const auth = await login(ctx);
+    ctx.faux.setResponses([finishOnly({ reply: '已整理' })]);
+
+    const created = await upload(ctx, auth.token, 'meeting.webm');
+    expect(created.status).toBe(202);
+
+    const done = await waitForRecording(ctx, auth.token, created.body.id);
+    expect(done.status).toBe('completed');
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatch(/\.webm$/);
+
+    expect(transcoded).toHaveLength(1);
+    expect(transcoded[0]).toMatch(/\.m4a$/);
+
+    // 成功后音频路径清空，磁盘上不留录音
+    const row = ctx.app.db
+      .select()
+      .from(recordings)
+      .all()
+      .find((item) => item.id === created.body.id);
+    expect(row?.audioPath).toBeNull();
   });
 
   it('超过时长上限返回 400', async () => {

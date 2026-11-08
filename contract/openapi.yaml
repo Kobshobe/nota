@@ -178,7 +178,7 @@ paths:
                 audio:
                   type: string
                   format: binary
-                  description: wav / aiff / flac / m4a / mp3 / aac / opus / ogg，上限 12 MB
+                  description: wav / aiff / flac / m4a / mp3 / aac / opus / ogg（webm 会先转成 m4a），上限 12 MB
                 durationMs:
                   type: integer
                   minimum: 1
