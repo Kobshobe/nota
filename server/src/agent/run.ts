@@ -170,18 +170,19 @@ export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
   const payload = staging.getFinishPayload();
   if (!payload) {
     // 模型/供应商失败时 pi-agent 会正常 resolve，真实原因只在 errorMessage 里。
-    const reason = agent.state.errorMessage ? sanitizeLogText(agent.state.errorMessage) : '';
+    const hasError = Boolean(agent.state.errorMessage);
+    const reason = sanitizeLogText(agent.state.errorMessage ?? '') || '未知错误';
     logWarn(
       { threadId: thread.id },
       () =>
         withUnfinished(
-          reason
+          hasError
             ? `agent 运行失败：${reason}（${toolCalls.length} 次工具调用，${formatDuration(Date.now() - runStartedAt)}）`
             : `agent 运行结束但未调用 finish（${toolCalls.length} 次工具调用，${formatDuration(Date.now() - runStartedAt)}）`,
           pending,
         ),
     );
-    if (reason) throw new AgentRunError('failed', `Agent run failed: ${reason}`);
+    if (hasError) throw new AgentRunError('failed', `Agent run failed: ${reason}`);
     throw new AgentRunError('unfinished', 'Agent did not finish');
   }
 

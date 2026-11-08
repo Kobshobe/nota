@@ -145,9 +145,19 @@ function sanitize(value: string): string {
     .trim();
 }
 
-/** 给运行级日志用的单行化 + 截断。 */
+const SECRET_PATTERNS: [RegExp, string][] = [
+  [/\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}/g, '[redacted-key]'],
+  [/\bBearer\s+[A-Za-z0-9._-]{8,}/gi, 'Bearer [redacted]'],
+  [/\b(?:api[_-]?key|token|secret|password)\b\s*[=:]\s*\S+/gi, '[redacted]'],
+];
+
+/** 给运行级日志用的单行化 + 截断 + 常见密钥打码。 */
 export function sanitizeLogText(value: string, max = 160): string {
-  return truncate(sanitize(value), max);
+  let text = sanitize(value);
+  for (const [pattern, replacement] of SECRET_PATTERNS) {
+    text = text.replace(pattern, replacement);
+  }
+  return truncate(text, max);
 }
 
 function truncate(value: string, max = MAX_TEXT): string {

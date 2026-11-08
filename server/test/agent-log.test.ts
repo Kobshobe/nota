@@ -106,6 +106,22 @@ describe('场景：日志 · 一次运行打印可读的工具调用', () => {
     expect(failure).not.toContain('\n');
   });
 
+  it('供应商错误里带密钥时先打码再写日志', async () => {
+    ctx.faux.setResponses([
+      fauxAssistantMessage('', {
+        stopReason: 'error',
+        errorMessage: 'invalid api_key=sk-abcdef1234567890 for request',
+      }),
+    ]);
+
+    const response = await sendMessage(ctx, token, '再试一次');
+
+    expect(response.status).toBe(500);
+    const failure = messagesOf(lines).find((line) => line.startsWith('agent 运行失败：'));
+    expect(failure).toContain('[redacted');
+    expect(failure).not.toContain('sk-abcdef1234567890');
+  });
+
   it('结构化字段保留工具名、耗时和失败标记，便于机器读取', async () => {
     ctx.faux.setResponses([
       finishWith([{ name: 'create_item', args: { title: '写总结', kind: 'todo' } }], {
