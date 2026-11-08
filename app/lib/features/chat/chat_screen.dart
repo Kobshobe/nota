@@ -182,9 +182,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           if (state?.thread.kind == ThreadKind.daily)
             IconButton(
               key: const ValueKey('start-meeting'),
-              tooltip: '新建会议',
+              tooltip: '会议录音',
               onPressed: _openNewMeeting,
-              icon: const Icon(Icons.call_outlined, size: 22),
+              icon: const Icon(Icons.mic_none, size: 22),
             ),
           const SizedBox(width: 8),
         ],
