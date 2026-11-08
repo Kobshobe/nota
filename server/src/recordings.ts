@@ -24,6 +24,8 @@ import {
 import { formatTranscript } from './asr/transcript';
 import { isKnownAudio } from './asr/audio';
 import { sendMessageCore } from './messages';
+import { dayInTimeZone } from './lib/time';
+import { refundQuota } from './quota';
 
 /** 同一条录音同一时刻只跑一个任务。 */
 const active = new Set<string>();
@@ -219,6 +221,12 @@ async function runRecording(app: FastifyInstance, recordingId: string): Promise<
   try {
     if (!row.audioPath) throw transcriptionFailed('recording audio is missing');
     const transcript = await app.transcribeAudio(row.audioPath);
+    if (transcript.durationSec > app.config.recordingMaxSeconds) {
+      throw transcriptionFailed('recording is longer than the limit', {
+        maxSeconds: app.config.recordingMaxSeconds,
+        durationSec: transcript.durationSec,
+      });
+    }
     const thread = ensureThread(app, row);
     const user = app.db.select().from(users).where(eq(users.id, row.userId)).get();
     if (!user) throw transcriptionFailed('recording owner is missing');
@@ -330,29 +338,67 @@ function clientMessageIdFor(recordingId: string): string {
   return `rec:${recordingId}`;
 }
 
-/** 服务启动时把被进程重启打断的任务标成失败，并清理过期音频。 */
+/** 服务启动时把被进程重启打断的任务对账成终态，并清理过期音频。 */
 export async function recoverRecordings(app: FastifyInstance): Promise<void> {
   const now = app.now();
   // 启动瞬间本进程没有任何存活任务，所以全部 transcribing 都是上次进程留下的。
   const stale = app.db
-    .select({ id: recordings.id })
+    .select()
     .from(recordings)
     .where(eq(recordings.status, 'transcribing'))
     .all();
-  for (const item of stale) {
+  for (const row of stale) {
+    const threadId = row.threadId;
+    const threadMessages = threadId
+      ? app.db.select().from(messages).where(eq(messages.threadId, threadId)).all()
+      : [];
+
+    // Agent 已经写完 assistant 消息：这场会议实际已经完成，补回 completed 即可。
+    if (threadMessages.some((message) => message.role === 'assistant')) {
+      if (row.audioPath) await rm(row.audioPath, { force: true });
+      app.db
+        .update(recordings)
+        .set({
+          status: 'completed',
+          audioPath: null,
+          errorCode: null,
+          errorMessage: null,
+          updatedAt: now.toISOString(),
+        })
+        .where(eq(recordings.id, row.id))
+        .run();
+      continue;
+    }
+
+    // 只写了用户消息就中断：退回已扣额度，删掉空会议，重传时不会重复扣。
+    if (threadId) {
+      const userMessage = threadMessages.find((message) => message.role === 'user');
+      if (userMessage) {
+        refundQuota(
+          app.db,
+          row.userId,
+          dayInTimeZone(new Date(userMessage.createdAt), app.config.quotaTimezone),
+          now,
+        );
+        app.db.delete(messages).where(eq(messages.threadId, threadId)).run();
+      }
+      app.db.delete(threads).where(eq(threads.id, threadId)).run();
+    }
+
     app.db
       .update(recordings)
       .set({
         status: 'failed',
+        threadId: null,
         errorCode: 'INTERRUPTED',
         errorMessage: 'The server restarted while transcribing',
         updatedAt: now.toISOString(),
       })
-      .where(eq(recordings.id, item.id))
+      .where(eq(recordings.id, row.id))
       .run();
   }
   if (stale.length > 0) {
-    app.log.warn({ count: stale.length }, 'recordings marked interrupted');
+    app.log.warn({ count: stale.length }, 'recordings reconciled after restart');
   }
 
   await cleanupExpiredAudio(app, now);

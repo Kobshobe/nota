@@ -3,7 +3,6 @@ import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq } from 'drizzle-orm';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { audioMimeType } from './asr/minimax';
 import { isKnownAudio } from './asr/audio';
 import { recordings, type RecordingRow } from './db/schema';
 import type { DeviceAuth } from './devices';
@@ -130,10 +129,14 @@ function requireDeviceAuth(request: FastifyRequest): DeviceAuth {
   return request.deviceAuth;
 }
 
-function parseDurationMs(value: unknown): number | undefined {
-  if (typeof value !== 'string' || !value.trim()) return undefined;
+function parseDurationMs(value: unknown): number {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw invalidInput('durationMs must be a positive integer');
+  }
   const parsed = Number(value);
-  if (!Number.isInteger(parsed) || parsed <= 0) return undefined;
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw invalidInput('durationMs must be a positive integer');
+  }
   return parsed;
 }
 

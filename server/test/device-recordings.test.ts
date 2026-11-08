@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { readdirSync } from 'node:fs';
+import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
-import { recordings } from '../src/db/schema';
+import { messages, recordings, threads, users } from '../src/db/schema';
+import { chargeQuota } from '../src/quota';
+import { recoverRecordings } from '../src/recordings';
 import {
   call,
   createDevice,
@@ -174,6 +177,39 @@ describe('场景：设备会议录音 → 纪要', () => {
     expect(response.status).toBe(400);
   });
 
+  it('非法 durationMs 返回 400', async () => {
+    ctx = await createTestApp();
+    const auth = await login(ctx);
+    const device = await createDevice(ctx, auth.user.email);
+
+    const response = await upload(ctx, device.token, 'meeting.mp3', Buffer.from('audio'), {
+      durationMs: 'abc',
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('转写时长超过上限时失败且不建会', async () => {
+    ctx = await createTestApp({
+      transcript: { ...DEFAULT_TRANSCRIPT, durationSec: 500 },
+    });
+    const auth = await login(ctx);
+    const device = await createDevice(ctx, auth.user.email);
+
+    const created = await upload(ctx, device.token);
+    const failed = await waitForRecording(ctx, device.token, created.body.id);
+    expect(failed.status).toBe('failed');
+    expect(failed.errorCode).toBe('TRANSCRIPTION_FAILED');
+
+    const threadsResponse = await call(ctx, {
+      method: 'GET',
+      url: '/api/threads',
+      token: auth.token,
+    });
+    expect(
+      threadsResponse.body.threads.filter((thread: { kind: string }) => thread.kind === 'meeting'),
+    ).toHaveLength(0);
+  });
+
   it('超过大小上限返回 413', async () => {
     ctx = await createTestApp({ recordingMaxBytes: 64 });
     const auth = await login(ctx);
@@ -247,11 +283,154 @@ describe('场景：设备会议录音 → 纪要', () => {
       })
       .run();
 
-    const { recoverRecordings } = await import('../src/recordings');
     await recoverRecordings(ctx.app);
 
     const row = ctx.app.db.select().from(recordings).all().find((item) => item.deviceId === device.id);
     expect(row?.status).toBe('failed');
     expect(row?.errorCode).toBe('INTERRUPTED');
+  });
+
+  it('重启时退回只写了用户消息的额度并清掉空会议', async () => {
+    ctx = await createTestApp();
+    const auth = await login(ctx);
+    const device = await createDevice(ctx, auth.user.email);
+    const owner = ctx.app.db.select().from(users).where(eq(users.email, auth.user.email)).get();
+    if (!owner) throw new Error('user missing');
+    const now = ctx.currentNow.toISOString();
+    chargeQuota(ctx.app.db, owner, ctx.app.config, ctx.currentNow);
+
+    const threadId = randomUUID();
+    const recordingId = randomUUID();
+    ctx.app.db
+      .insert(threads)
+      .values({
+        id: threadId,
+        userId: owner.id,
+        kind: 'meeting',
+        title: '新会议',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    ctx.app.db
+      .insert(recordings)
+      .values({
+        id: recordingId,
+        userId: owner.id,
+        deviceId: device.id,
+        status: 'transcribing',
+        mimeType: 'audio/mpeg',
+        sizeBytes: 10,
+        durationMs: 1000,
+        audioPath: null,
+        transcriptJson: null,
+        threadId,
+        errorCode: null,
+        errorMessage: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    ctx.app.db
+      .insert(messages)
+      .values({
+        id: randomUUID(),
+        threadId,
+        role: 'user',
+        content: '说话人 1：开始开会。',
+        payloadJson: null,
+        clientMessageId: `rec:${recordingId}`,
+        userMessageId: null,
+        responseJson: null,
+        createdAt: now,
+      })
+      .run();
+
+    await recoverRecordings(ctx.app);
+
+    const usage = await call(ctx, { method: 'GET', url: '/api/usage', token: auth.token });
+    expect(usage.body.used).toBe(0);
+    const threadList = await call(ctx, { method: 'GET', url: '/api/threads', token: auth.token });
+    expect(
+      threadList.body.threads.filter((thread: { kind: string }) => thread.kind === 'meeting'),
+    ).toHaveLength(0);
+    const row = ctx.app.db.select().from(recordings).all().find((item) => item.id === recordingId);
+    expect(row?.status).toBe('failed');
+    expect(row?.threadId).toBeNull();
+  });
+
+  it('重启时把已有 assistant 回复的录音补成 completed', async () => {
+    ctx = await createTestApp();
+    const auth = await login(ctx);
+    const device = await createDevice(ctx, auth.user.email);
+    const owner = ctx.app.db.select().from(users).where(eq(users.email, auth.user.email)).get();
+    if (!owner) throw new Error('user missing');
+    const now = ctx.currentNow.toISOString();
+
+    const threadId = randomUUID();
+    const recordingId = randomUUID();
+    ctx.app.db
+      .insert(threads)
+      .values({
+        id: threadId,
+        userId: owner.id,
+        kind: 'meeting',
+        title: '新会议',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    ctx.app.db
+      .insert(recordings)
+      .values({
+        id: recordingId,
+        userId: owner.id,
+        deviceId: device.id,
+        status: 'transcribing',
+        mimeType: 'audio/mpeg',
+        sizeBytes: 10,
+        durationMs: 1000,
+        audioPath: null,
+        transcriptJson: null,
+        threadId,
+        errorCode: null,
+        errorMessage: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    ctx.app.db
+      .insert(messages)
+      .values([
+        {
+          id: randomUUID(),
+          threadId,
+          role: 'user' as const,
+          content: '说话人 1：开始开会。',
+          payloadJson: null,
+          clientMessageId: `rec:${recordingId}`,
+          userMessageId: null,
+          responseJson: null,
+          createdAt: now,
+        },
+        {
+          id: randomUUID(),
+          threadId,
+          role: 'assistant' as const,
+          content: '已整理。',
+          payloadJson: null,
+          clientMessageId: null,
+          userMessageId: null,
+          responseJson: null,
+          createdAt: now,
+        },
+      ])
+      .run();
+
+    await recoverRecordings(ctx.app);
+
+    const row = ctx.app.db.select().from(recordings).all().find((item) => item.id === recordingId);
+    expect(row?.status).toBe('completed');
+    expect(row?.threadId).toBe(threadId);
   });
 });

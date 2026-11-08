@@ -32,11 +32,42 @@ bool hasPending = false;
 String pendingId;
 unsigned long recordingStartedAt = 0;
 bool buttonWasDown = false;
+bool pressConsumed = false;
 unsigned long buttonDownAt = 0;
 bool longPressHandled = false;
 
 void ledOn() { digitalWrite(LED_PIN, HIGH); }
 void ledOff() { digitalWrite(LED_PIN, LOW); }
+
+// 上传时不阻塞灯：HTTPClient 每读一块 body，就翻转一次 LED，让「上传中」看得见。
+class BlinkStream : public Stream {
+ public:
+  BlinkStream(const uint8_t* data, size_t length) : data_(data), length_(length) {}
+
+  int available() override { return (int)(length_ - position_); }
+
+  int read() override {
+    if (position_ >= length_) return -1;
+    const unsigned long now = millis();
+    if (now - lastToggle_ >= 500UL) {
+      lastToggle_ = now;
+      ledState_ = !ledState_;
+      digitalWrite(LED_PIN, ledState_ ? HIGH : LOW);
+    }
+    return data_[position_++];
+  }
+
+  int peek() override { return position_ < length_ ? data_[position_] : -1; }
+  void flush() override {}
+  size_t write(uint8_t) override { return 0; }
+
+ private:
+  const uint8_t* data_;
+  size_t length_;
+  size_t position_ = 0;
+  bool ledState_ = false;
+  unsigned long lastToggle_ = 0;
+};
 
 void slowBlinkTick() {
   digitalWrite(LED_PIN, (millis() % 1000UL) < 500UL ? HIGH : LOW);
@@ -161,7 +192,14 @@ bool httpPost(const String& url, std::vector<uint8_t>& body, String& response, i
   if (!http.begin(tls, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + deviceToken);
   http.addHeader("Content-Type", String("multipart/form-data; boundary=") + BOUNDARY);
-  code = http.POST(body.data(), body.size());
+  BlinkStream stream(body.data(), body.size());
+  code = http.sendRequest("POST", &stream, body.size());
+  if (code <= 0) {
+    Serial.print("upload: error ");
+    Serial.print(code);
+    Serial.print(" ");
+    Serial.println(HTTPClient::errorToString(code));
+  }
   response = http.getString();
   http.end();
   return code > 0;
@@ -339,21 +377,27 @@ void handleButton() {
   if (down && !buttonWasDown) {
     buttonDownAt = millis();
     longPressHandled = false;
+    pressConsumed = false;
     if (state == RECORDING) {
+      pressConsumed = true;
       stopAndUpload();
     } else if (state == IDLE && !hasPending) {
+      pressConsumed = true;
       startRecording();
     }
   }
-  if (down && buttonWasDown && state == IDLE && hasPending && !longPressHandled &&
+  if (down && buttonWasDown && !pressConsumed && state == IDLE && hasPending && !longPressHandled &&
       millis() - buttonDownAt >= LONG_PRESS_MS) {
     longPressHandled = true;
+    pressConsumed = true;
     discardPending();
   }
   if (!down && buttonWasDown) {
-    if (state == IDLE && hasPending && !longPressHandled && millis() - buttonDownAt > 50) {
+    if (!pressConsumed && state == IDLE && hasPending && !longPressHandled &&
+        millis() - buttonDownAt > 50) {
       retryPending();
     }
+    pressConsumed = false;
   }
   buttonWasDown = down;
 }

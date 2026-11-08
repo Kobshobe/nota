@@ -11,10 +11,10 @@
 7. `server/src/app.ts`：移除 TTS、`synthesizeSpeech`、`recoverDeviceUtterances`、`registerDeviceUtteranceRoutes`；注册 `device-recordings`；启动对账只保留 `recoverRecordings`。
 8. 删除 `server/src/device-utterances.ts`、`server/src/tts/minimax.ts`、`server/test/device-utterances.test.ts`、`server/test/tts.test.ts`；`server/src/types.ts` 删除 `synthesizeSpeech` 装饰器类型。
 9. `server/src/scripts/seed-device.ts`：保留设备 token 预置；去掉只为日常 thread 服务的建 thread 步骤。
-10. `server/test/device-recordings.test.ts`（新）：上传 202、完成带 `threadId`、会议 thread 只有一条、额度扣减、失败退款、跨设备 404、无 token 401、超时长 400、坏格式 415、超大 413、启动对账 `INTERRUPTED`。
+10. `server/test/helpers.ts` 与 `server/test/device-recordings.test.ts`（新）：上传 202、完成带 `threadId`、会议 thread 只有一条、额度扣减、转写失败不扣、重启对账退款、跨设备 404、无 token 401、超时长 400、坏格式 415、超大 413、`INTERRUPTED`。
 11. `device/firmware/nota_device.ino`：按键 + LED 状态机、整段上传、5 秒轮询、失败快闪 10 秒、重试语义、串口 `s` / `d`、内嵌 fixture。
-12. `device/fixtures/meeting-01.mp3` + `device/firmware/fixture.h` + `device/tools/embed-fixture.mjs`：换约 40 秒双人会议音频，重新生成头文件。
-13. `device/README.md`：按会议录音流程重写步骤、预期输出和排查表。
+12. `device/fixtures/meeting-01.mp3` + `device/firmware/fixture.h` + `device/tools/embed-fixture.mjs`：换约 23 秒双人会议音频，重新生成头文件。
+13. `device/README.md` 与 `device/design.md`：按会议录音流程重写步骤、预期输出和状态机。
 14. `docs/product.md`：S10、4.9、6.3 与术语改成设备会议录音；守住 5900 预算。
 15. `docs/architecture.md`：组件、数据流、表、扩展点、限制里的设备语音改为设备会议录音，去掉 TTS 与 `device_utterances`。
 16. `docs/engineering.md` 5.6：设备配置、上传、轮询、无音频下行、Wokwi 验收。
