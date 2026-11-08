@@ -14,7 +14,6 @@ declare module 'fastify' {
     now: () => Date;
     transcribeAudio: (filePath: string) => Promise<Transcript>;
     prepareAudio: (filePath: string) => Promise<string>;
-    synthesizeSpeech: (text: string) => Promise<Buffer>;
     authenticate: (
       request: import('fastify').FastifyRequest,
       reply: import('fastify').FastifyReply,

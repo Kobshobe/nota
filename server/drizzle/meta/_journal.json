@@ -36,6 +36,13 @@
       "when": 1794146430737,
       "tag": "0004_item-times",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794149057340,
+      "tag": "0005_device-recordings",
+      "breakpoints": true
     }
   ]
 }

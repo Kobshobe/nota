@@ -96,6 +96,7 @@ export function registerRecordingRoutes(app: FastifyInstance): void {
       const row: RecordingRow = {
         id,
         userId: user.id,
+        deviceId: null,
         status: 'transcribing',
         mimeType: file.mimetype || 'application/octet-stream',
         sizeBytes: audio.length,

@@ -23,7 +23,6 @@ import { verifyJwt } from './lib/jwt';
 import { createDeepSeekRuntime, type AgentRuntime } from './agent/runtime';
 import { transcribeAudio as runTranscription, type Transcript } from './asr/minimax';
 import { prepareAudio as prepareAudioFile } from './asr/audio';
-import { synthesizeSpeech as runSynthesizeSpeech } from './tts/minimax';
 import { transcriptionFailed } from './lib/errors';
 import { authenticateDevice } from './devices';
 import { registerAuthRoutes } from './auth';
@@ -31,10 +30,7 @@ import { registerThreadRoutes } from './threads';
 import { registerItemRoutes } from './items';
 import { registerMessageRoutes } from './messages';
 import { recoverRecordings, registerRecordingRoutes } from './recordings';
-import {
-  recoverDeviceUtterances,
-  registerDeviceUtteranceRoutes,
-} from './device-utterances';
+import { registerDeviceRecordingRoutes } from './device-recordings';
 import { registerUsageRoutes } from './usage';
 import './types';
 
@@ -44,7 +40,6 @@ export interface BuildAppOptions {
   runtime?: AgentRuntime;
   transcribeAudio?: (filePath: string) => Promise<Transcript>;
   prepareAudio?: (filePath: string) => Promise<string>;
-  synthesizeSpeech?: (text: string) => Promise<Buffer>;
   now?: () => Date;
   logger?: FastifyServerOptions['logger'];
 }
@@ -70,19 +65,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const prepareAudio =
     options.prepareAudio ??
     ((filePath: string) => prepareAudioFile(filePath, { ffmpegPath: config.ffmpegPath }));
-  const synthesizeSpeech =
-    options.synthesizeSpeech ??
-    ((text: string) => {
-      const apiKey = config.minimaxApiKey;
-      if (!apiKey) throw internal('MINIMAX_API_KEY is not configured');
-      return runSynthesizeSpeech({
-        apiKey,
-        baseUrl: config.minimaxTtsBaseUrl,
-        model: config.minimaxTtsModel,
-        voice: config.minimaxTtsVoice,
-        text,
-      });
-    });
   const now = options.now ?? (() => new Date());
 
   const app = Fastify({
@@ -99,7 +81,6 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('runtime', runtime);
   app.decorate('transcribeAudio', transcribeAudio);
   app.decorate('prepareAudio', prepareAudio);
-  app.decorate('synthesizeSpeech', synthesizeSpeech);
   app.decorate('now', now);
   app.decorate('authenticate', async (request) => {
     await verifyJwt(request);
@@ -184,9 +165,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerItemRoutes(app);
   registerUsageRoutes(app);
   registerRecordingRoutes(app);
-  registerDeviceUtteranceRoutes(app);
+  registerDeviceRecordingRoutes(app);
   await recoverRecordings(app);
-  await recoverDeviceUtterances(app);
 
   return app;
 }
