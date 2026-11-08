@@ -4,6 +4,7 @@ export const ERROR_CODES = [
   'UNAUTHORIZED',
   'NOT_FOUND',
   'QUOTA_EXCEEDED',
+  'TRANSCRIPTION_FAILED',
   'INTERNAL',
 ] as const;
 
@@ -50,5 +51,14 @@ export const notFound = (message = 'Resource not found') => new AppError('NOT_FO
 
 export const quotaExceeded = (message: string, retryAfterSeconds: number, details?: unknown) =>
   new AppError('QUOTA_EXCEEDED', 429, message, { retryAfterSeconds, details });
+
+export const transcriptionFailed = (message = 'Transcription failed', details?: unknown) =>
+  new AppError('TRANSCRIPTION_FAILED', 502, message, { details });
+
+export const unsupportedAudio = (message = 'Unsupported audio format', details?: unknown) =>
+  new AppError('INVALID_INPUT', 415, message, { details });
+
+export const payloadTooLarge = (message = 'Audio file is too large', details?: unknown) =>
+  new AppError('INVALID_INPUT', 413, message, { details });
 
 export const internal = (message = 'Internal server error') => new AppError('INTERNAL', 500, message);

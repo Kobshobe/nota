@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:nota/features/chat/chat_screen.dart';
 import 'package:nota/features/chat/models.dart';
 import 'package:nota/features/chat/new_meeting_screen.dart';
+import 'package:nota/features/meeting/recorder_screen.dart';
 
 import 'test_helpers.dart';
 
@@ -31,6 +32,10 @@ Widget chatApp(FakeApi api, NotaThread daily) {
         builder: (context, state) => const NewMeetingScreen(),
       ),
       GoRoute(
+        path: '/meeting/record',
+        builder: (context, state) => const MeetingRecorderScreen(),
+      ),
+      GoRoute(
         path: '/chat/:threadId',
         builder: (context, state) =>
             ChatScreen(threadId: state.pathParameters['threadId']!),
@@ -53,9 +58,9 @@ void main() {
 
     // when：点右上角会议按钮
     await tester.tap(find.byKey(const ValueKey('start-meeting')));
-    await pumpUntil(tester, find.text('粘贴会议文字'));
+    await pumpUntil(tester, find.text('开始录音'));
 
-    // then：只是空白会议页，服务端没有多出会议
+    // then：只是录音页，服务端没有多出会议
     expect(find.text('新会议'), findsOneWidget);
     expect(
       api.threads.where((item) => item.kind == ThreadKind.meeting),
@@ -74,6 +79,8 @@ void main() {
     await tester.pumpWidget(chatApp(api, daily));
     await pumpUntil(tester, find.byKey(const ValueKey('start-meeting')));
     await tester.tap(find.byKey(const ValueKey('start-meeting')));
+    await pumpUntil(tester, find.byKey(const ValueKey('recording-paste-text')));
+    await tester.tap(find.byKey(const ValueKey('recording-paste-text')));
     await pumpUntil(tester, find.byKey(const ValueKey('chat-input')));
 
     // when：粘贴会议文字并发送
@@ -105,6 +112,8 @@ void main() {
     await tester.pumpWidget(chatApp(api, daily));
     await pumpUntil(tester, find.byKey(const ValueKey('start-meeting')));
     await tester.tap(find.byKey(const ValueKey('start-meeting')));
+    await pumpUntil(tester, find.byKey(const ValueKey('recording-paste-text')));
+    await tester.tap(find.byKey(const ValueKey('recording-paste-text')));
     await pumpUntil(tester, find.byKey(const ValueKey('chat-input')));
     await tester.enterText(
       find.byKey(const ValueKey('chat-input')),

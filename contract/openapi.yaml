@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
@@ -12,6 +12,7 @@ info:
     - 错误响应恒为 {code, message, details?, requestId}；code 只能取 ErrorResponse 枚举里的值。
     - 单次文字输入上限 20,000 字符。
     - 写消息带 clientMessageId；同键重试返回原结果，不重复创建或扣额度。
+    - 会议录音单次上限 8 分钟（480 秒）；转写在服务端异步完成，成功后才会创建会议。
 security:
   - bearerAuth: []
 servers:
@@ -24,6 +25,7 @@ tags:
   - name: messages
   - name: items
   - name: usage
+  - name: recordings
 paths:
   /api/health:
     get:
@@ -158,6 +160,97 @@ paths:
           $ref: '#/components/responses/QuotaExceeded'
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/recordings:
+    post:
+      tags: [recordings]
+      operationId: uploadRecording
+      summary: 上传一段会议录音并开始异步转写
+      description: 只有转写成功、写入第一条消息时才会创建会议；在此之前不存在任何 thread。
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [audio]
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: wav / aiff / flac / m4a / mp3 / aac / opus / ogg，上限 12 MB
+                durationMs:
+                  type: integer
+                  minimum: 1
+                  maximum: 480000
+                  description: 客户端测得的录音时长，用于展示与排查
+      responses:
+        '202':
+          description: 已接收，转写中
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: 音频超过 12 MB
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: 音频格式不受支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/recordings/{recordingId}:
+    get:
+      tags: [recordings]
+      operationId: getRecording
+      summary: 查询录音的转写状态
+      parameters:
+        - $ref: '#/components/parameters/RecordingId'
+      responses:
+        '200':
+          description: 录音状态；completed 时带 threadId
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/recordings/{recordingId}/retry:
+    post:
+      tags: [recordings]
+      operationId: retryRecording
+      summary: 重跑一条失败的录音
+      description: 音频在失败后保留 24 小时；重试复用已创建的会议，不会重复建会或扣额度。
+      parameters:
+        - $ref: '#/components/parameters/RecordingId'
+      responses:
+        '202':
+          description: 已重新排队
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Recording'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
   /api/items:
     get:
       tags: [items]
@@ -303,6 +396,12 @@ components:
         type: string
     ItemId:
       name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+    RecordingId:
+      name: recordingId
       in: path
       required: true
       schema:
@@ -649,6 +748,29 @@ components:
         resetsAt:
           type: string
           format: date-time
+    Recording:
+      type: object
+      additionalProperties: false
+      required: [id, status, createdAt]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [transcribing, completed, failed]
+        threadId:
+          type: string
+          description: 仅 completed 时存在；转写成功后创建的会议
+        durationMs:
+          type: integer
+          minimum: 0
+        errorCode:
+          type: string
+          enum: [TRANSCRIPTION_FAILED, QUOTA_EXCEEDED, INTERRUPTED]
+          description: 仅 failed 时存在；INTERRUPTED 表示服务重启打断了任务
+        createdAt:
+          type: string
+          format: date-time
     ErrorResponse:
       type: object
       additionalProperties: false
@@ -656,7 +778,7 @@ components:
       properties:
         code:
           type: string
-          enum: [INVALID_INPUT, INVALID_CREDENTIALS, UNAUTHORIZED, NOT_FOUND, QUOTA_EXCEEDED, INTERNAL]
+          enum: [INVALID_INPUT, INVALID_CREDENTIALS, UNAUTHORIZED, NOT_FOUND, QUOTA_EXCEEDED, TRANSCRIPTION_FAILED, INTERNAL]
           description: 机器可读的错误码，客户端按码做 UI 决策
         message:
           type: string

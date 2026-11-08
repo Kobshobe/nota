@@ -112,9 +112,37 @@ export const usageDaily = sqliteTable(
   (table) => [uniqueIndex('usage_daily_user_day').on(table.userId, table.day)],
 );
 
+export const recordings = sqliteTable(
+  'recordings',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['transcribing', 'completed', 'failed'] }).notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    durationMs: integer('duration_ms'),
+    audioPath: text('audio_path'),
+    transcriptJson: text('transcript_json'),
+    threadId: text('thread_id').references(() => threads.id, { onDelete: 'set null' }),
+    errorCode: text('error_code', {
+      enum: ['TRANSCRIPTION_FAILED', 'QUOTA_EXCEEDED', 'INTERRUPTED'],
+    }),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('recordings_user_created_idx').on(table.userId, table.createdAt),
+    index('recordings_status_idx').on(table.status),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type ThreadRow = typeof threads.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
 export type ItemRow = typeof items.$inferSelect;
 export type ToolCallRow = typeof toolCalls.$inferSelect;
 export type UsageDailyRow = typeof usageDaily.$inferSelect;
+export type RecordingRow = typeof recordings.$inferSelect;

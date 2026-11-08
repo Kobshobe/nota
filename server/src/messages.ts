@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, or, sql } from 'drizzle-orm';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyBaseLogger, FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from './auth';
 import {
@@ -9,6 +9,7 @@ import {
   toolCalls as toolCallsTable,
   type MessageRow,
   type ThreadRow,
+  type UserRow,
 } from './db/schema';
 import type { MessagePayload, ToolName, ToolTrace } from './domain';
 import { internal, invalidInput } from './lib/errors';
@@ -51,147 +52,175 @@ export function registerMessageRoutes(app: FastifyInstance): void {
     const { threadId } = request.params as { threadId: string };
     const thread = getOwnedThread(app, user.id, threadId);
     const body = sendMessageSchema.parse(request.body);
-    const key = `${thread.id}:${body.clientMessageId}`;
-    const pending = inFlight.get(key);
-    if (pending) return pending;
-
-    const task = (async () => {
-      const now = app.now();
-
-      const existingUserMessage = app.db
-        .select()
-        .from(messages)
-        .where(and(eq(messages.threadId, thread.id), eq(messages.clientMessageId, body.clientMessageId)))
-        .get();
-
-      if (existingUserMessage) {
-        const stored = findStoredResponse(app, existingUserMessage.id);
-        if (stored) return stored;
-      }
-
-      let userMessage: MessageRow;
-      let chargedDay: string | undefined;
-      if (existingUserMessage) {
-        if (existingUserMessage.content !== body.content) {
-          throw invalidInput('clientMessageId was reused with different content');
-        }
-        userMessage = existingUserMessage;
-        const originalDay = dayInTimeZone(
-          new Date(existingUserMessage.createdAt),
-          app.config.quotaTimezone,
-        );
-        const currentDay = dayInTimeZone(now, app.config.quotaTimezone);
-        if (originalDay !== currentDay) {
-          refundQuota(app.db, user.id, originalDay, now);
-          chargedDay = chargeQuota(app.db, user, app.config, now).day;
-        } else {
-          chargedDay = originalDay;
-        }
-      } else {
-        const charge = chargeQuota(app.db, user, app.config, now);
-        chargedDay = charge.day;
-        userMessage = {
-          id: randomUUID(),
-          threadId: thread.id,
-          role: 'user',
-          content: body.content,
-          payloadJson: null,
-          clientMessageId: body.clientMessageId,
-          userMessageId: null,
-          responseJson: null,
-          createdAt: now.toISOString(),
-        };
-        try {
-          app.db.insert(messages).values(userMessage).run();
-        } catch (error) {
-          refundQuota(app.db, user.id, chargedDay, now);
-          throw error;
-        }
-      }
-
-      const fail = async (message: string): Promise<never> => {
-        app.db
-          .delete(messages)
-          .where(or(eq(messages.id, userMessage.id), eq(messages.userMessageId, userMessage.id)))
-          .run();
-        if (chargedDay) refundQuota(app.db, user.id, chargedDay, now);
-        throw internal(message);
-      };
-
-      if (!app.runtime.apiKey) {
-        request.log.warn({ requestId: request.id }, 'message request rejected: model key is not configured');
-        return fail('DEEPSEEK_API_KEY is not configured');
-      }
-
-      const run = await runAgent({
-        db: app.db,
-        runtime: app.runtime,
-        thread,
-        userMessageId: userMessage.id,
-        userText: body.content,
-        now,
-        log: request.log,
-      }).catch(async (error: unknown) => {
-        request.log.error(
-          {
-            requestId: request.id,
-            errorName: error instanceof Error ? error.name : 'UnknownError',
-            errorMessage: error instanceof Error ? error.message : 'unknown',
-          },
-          'agent run failed',
-        );
-        return fail(
-          error instanceof AgentRunError && error.kind === 'unfinished'
-            ? 'Agent did not finish'
-            : 'Agent run failed',
-        );
-      });
-
-      const payload = run.payload;
-      const assistantContent =
-        payload.reply?.trim() || payload.summary?.trim() || payload.title?.trim() || '已处理';
-      const assistantMessage: MessageRow = {
-        id: randomUUID(),
-        threadId: thread.id,
-        role: 'assistant',
-        content: assistantContent,
-        payloadJson: payloadToJson(payload),
-        clientMessageId: null,
-        userMessageId: userMessage.id,
-        responseJson: null,
-        createdAt: now.toISOString(),
-      };
-
-      try {
-        return persistRun(app, {
-          thread,
-          userMessage,
-          assistantMessage,
-          toolCalls: run.toolCalls,
-          payload,
-          usage: getUsage(app.db, user, app.config, now),
-          staging: run.staging,
-          now,
-        });
-      } catch (error) {
-        request.log.error(
-          {
-            requestId: request.id,
-            errorName: error instanceof Error ? error.name : 'UnknownError',
-            errorMessage: error instanceof Error ? error.message : 'unknown',
-          },
-          'message persistence failed',
-        );
-        return fail('Failed to persist message');
-      }
-    })();
-    inFlight.set(key, task);
-    try {
-      return await task;
-    } finally {
-      if (inFlight.get(key) === task) inFlight.delete(key);
-    }
+    return sendMessageCore(app, user, thread, {
+      content: body.content,
+      clientMessageId: body.clientMessageId,
+      log: request.log,
+      requestId: request.id,
+    });
   });
+}
+
+export interface SendMessageCoreOptions {
+  content: string;
+  clientMessageId: string;
+  log: FastifyBaseLogger;
+  requestId?: string;
+}
+
+/**
+ * 发送一条用户消息并跑 Agent。
+ *
+ * 路由与录音任务共用这条路径：额度预扣、幂等、工具轨迹、标题填充都只有一份实现。
+ */
+export async function sendMessageCore(
+  app: FastifyInstance,
+  user: UserRow,
+  thread: ThreadRow,
+  options: SendMessageCoreOptions,
+): Promise<SendMessageResponse> {
+  const { content, clientMessageId, log, requestId } = options;
+  const key = `${thread.id}:${clientMessageId}`;
+  const pending = inFlight.get(key);
+  if (pending) return pending;
+
+  const task = (async () => {
+
+  const now = app.now();
+
+  const existingUserMessage = app.db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.threadId, thread.id), eq(messages.clientMessageId, clientMessageId)))
+    .get();
+
+  if (existingUserMessage) {
+    const stored = findStoredResponse(app, existingUserMessage.id);
+    if (stored) return stored;
+  }
+
+  let userMessage: MessageRow;
+  let chargedDay: string | undefined;
+  if (existingUserMessage) {
+    if (existingUserMessage.content !== content) {
+      throw invalidInput('clientMessageId was reused with different content');
+    }
+    userMessage = existingUserMessage;
+    const originalDay = dayInTimeZone(
+      new Date(existingUserMessage.createdAt),
+      app.config.quotaTimezone,
+    );
+    const currentDay = dayInTimeZone(now, app.config.quotaTimezone);
+    if (originalDay !== currentDay) {
+      refundQuota(app.db, user.id, originalDay, now);
+      chargedDay = chargeQuota(app.db, user, app.config, now).day;
+    } else {
+      chargedDay = originalDay;
+    }
+  } else {
+    const charge = chargeQuota(app.db, user, app.config, now);
+    chargedDay = charge.day;
+    userMessage = {
+      id: randomUUID(),
+      threadId: thread.id,
+      role: 'user',
+      content: content,
+      payloadJson: null,
+      clientMessageId: clientMessageId,
+      userMessageId: null,
+      responseJson: null,
+      createdAt: now.toISOString(),
+    };
+    try {
+      app.db.insert(messages).values(userMessage).run();
+    } catch (error) {
+      refundQuota(app.db, user.id, chargedDay, now);
+      throw error;
+    }
+  }
+
+  const fail = async (message: string): Promise<never> => {
+    app.db
+      .delete(messages)
+      .where(or(eq(messages.id, userMessage.id), eq(messages.userMessageId, userMessage.id)))
+      .run();
+    if (chargedDay) refundQuota(app.db, user.id, chargedDay, now);
+    throw internal(message);
+  };
+
+  if (!app.runtime.apiKey) {
+    log.warn({ requestId }, 'message request rejected: model key is not configured');
+    return fail('DEEPSEEK_API_KEY is not configured');
+  }
+
+  const run = await runAgent({
+    db: app.db,
+    runtime: app.runtime,
+    thread,
+    userMessageId: userMessage.id,
+    userText: content,
+    now,
+    log: log,
+  }).catch(async (error: unknown) => {
+    log.error(
+      {
+        requestId: requestId ?? '-',
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+        errorMessage: error instanceof Error ? error.message : 'unknown',
+      },
+      'agent run failed',
+    );
+    return fail(
+      error instanceof AgentRunError && error.kind === 'unfinished'
+        ? 'Agent did not finish'
+        : 'Agent run failed',
+    );
+  });
+
+  const payload = run.payload;
+  const assistantContent =
+    payload.reply?.trim() || payload.summary?.trim() || payload.title?.trim() || '已处理';
+  const assistantMessage: MessageRow = {
+    id: randomUUID(),
+    threadId: thread.id,
+    role: 'assistant',
+    content: assistantContent,
+    payloadJson: payloadToJson(payload),
+    clientMessageId: null,
+    userMessageId: userMessage.id,
+    responseJson: null,
+    createdAt: now.toISOString(),
+  };
+
+  try {
+    return persistRun(app, {
+      thread,
+      userMessage,
+      assistantMessage,
+      toolCalls: run.toolCalls,
+      payload,
+      usage: getUsage(app.db, user, app.config, now),
+      staging: run.staging,
+      now,
+    });
+  } catch (error) {
+    log.error(
+      {
+        requestId: requestId ?? '-',
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+        errorMessage: error instanceof Error ? error.message : 'unknown',
+      },
+      'message persistence failed',
+    );
+    return fail('Failed to persist message');
+  }
+  })();
+  inFlight.set(key, task);
+  try {
+    return await task;
+  } finally {
+    if (inFlight.get(key) === task) inFlight.delete(key);
+  }
 }
 
 function findStoredResponse(app: FastifyInstance, userMessageId: string): SendMessageResponse | undefined {

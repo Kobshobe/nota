@@ -1,6 +1,6 @@
 # Nota Flutter 客户端
 
-Nota 的 Web / iOS 客户端：登录、日常与会议对话、候选事项确认、事项管理、本地提醒。
+Nota 的 Web / iOS 客户端：登录、日常对话、会议录音转纪要、候选事项确认、事项管理、本地提醒。
 
 ## 运行
 
@@ -25,7 +25,8 @@ flutter build web
 
 - `lib/core/`：Dio + 拦截器、token 存储、路由、主题、通知。
 - `lib/features/auth/`：登录 / 自动注册。
-- `lib/features/chat/`：主对话、会议、候选事项、额度。
+- `lib/features/chat/`：主对话、候选事项、额度。
+- `lib/features/meeting/`：录音页、录音抽象、录音字节读取。
 - `lib/features/items/`：事项列表与增删改完成。
 - `lib/shared/`：通用展示组件与时间格式。
 

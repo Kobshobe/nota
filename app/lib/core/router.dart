@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/login_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/chat/new_meeting_screen.dart';
+import '../features/meeting/recorder_screen.dart';
 import '../features/items/items_screen.dart';
 import '../features/profile/profile_screen.dart';
 import 'auth_store.dart';
@@ -54,6 +55,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/meeting/new',
         builder: (context, state) => const NewMeetingScreen(),
+      ),
+      GoRoute(
+        path: '/meeting/record',
+        builder: (context, state) => const MeetingRecorderScreen(),
       ),
       GoRoute(
         path: '/chat/:threadId',

@@ -14,6 +14,7 @@ import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import { buildApp } from '../src/app';
 import type { AppConfig } from '../src/config';
 import type { AgentRuntime } from '../src/agent/runtime';
+import type { Transcript } from '../src/asr/minimax';
 
 export interface TestContext {
   app: FastifyInstance;
@@ -30,7 +31,21 @@ export interface TestAppOptions {
   apiKey?: string | null;
   now?: Date;
   logger?: FastifyServerOptions['logger'];
+  /** 默认返回一段固定的双人对话；传 null 表示转写总是失败。 */
+  transcript?: Transcript | null;
+  /** 完全自定义转写，优先级高于 transcript。 */
+  transcribe?: (filePath: string) => Promise<Transcript>;
 }
+
+export const DEFAULT_TRANSCRIPT: Transcript = {
+  text: '人都到齐了吧？开始，先说报价这事。报价我重新核了一遍，比上次低了两千。',
+  durationSec: 13.7,
+  speakerCount: 2,
+  segments: [
+    { start: 0.2, end: 3.9, speaker: 'S1', text: '人都到齐了吧？开始，先说报价这事。' },
+    { start: 4.2, end: 8.6, speaker: 'S2', text: '报价我重新核了一遍，比上次低了两千。' },
+  ],
+};
 
 export async function createTestApp(options: TestAppOptions = {}): Promise<TestContext> {
   const dir = mkdtempSync(path.join(tmpdir(), 'nota-test-'));
@@ -47,6 +62,13 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     deepseekApiKey: options.apiKey === null ? undefined : (options.apiKey ?? 'test-deepseek-key'),
     deepseekBaseUrl: 'https://api.deepseek.com',
     deepseekModel: 'deepseek-flash',
+    minimaxApiKey: 'test-minimax-key',
+    minimaxAsrBaseUrl: 'https://api.minimax.cn',
+    minimaxAsrModel: 'asr-1.0',
+    recordingMaxSeconds: 480,
+    recordingMaxBytes: 12 * 1024 * 1024,
+    recordingRetentionHours: 24,
+    recordingsPath: path.join(dir, 'recordings'),
     logLevel: 'silent',
     logFormat: 'json',
   };
@@ -65,6 +87,14 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     config,
     databasePath,
     runtime,
+    transcribeAudio:
+      options.transcribe ??
+      (async () => {
+        if (options.transcript === null) {
+          throw new Error('transcription failed in test');
+        }
+        return options.transcript ?? DEFAULT_TRANSCRIPT;
+      }),
     now: () => clock.current,
     logger: options.logger ?? false,
   });

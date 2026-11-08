@@ -39,12 +39,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
-  /// 主对话右上角的会议入口：先进空白会议页，发了内容才真正建会议。
+  /// 主对话右上角的会议入口：直接开始收音，结束时才创建会议。
   Future<void> _openNewMeeting() async {
     if (_openingMeeting) return;
     _openingMeeting = true;
     try {
-      await context.push('/meeting/new');
+      await context.push('/meeting/record');
     } finally {
       _openingMeeting = false;
     }

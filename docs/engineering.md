@@ -69,6 +69,10 @@ lib/
     chat/models.dart
     items/items_screen.dart
     items/item_card.dart
+    meeting/recorder_screen.dart
+    meeting/recorder.dart
+    meeting/recording_bytes.dart
+    meeting/models.dart
     profile/profile_screen.dart
   shared/widgets/
     async_view.dart
@@ -126,6 +130,9 @@ server/src/
   messages.ts   发消息、额度、调用 agent
   items.ts      事项增删改完成
   usage.ts      额度
+  recordings.ts 录音上传/状态/重试与转写任务
+  asr/minimax.ts     MiniMax 转写适配
+  asr/transcript.ts  逐句转写合并成说话人全文
   agent/
     run.ts      pi-agent-core 组装、事件
     tools.ts    5 个工具 + finish
@@ -138,6 +145,8 @@ server/test/
   threads.test.ts
   items.test.ts
   agent.test.ts
+  recordings.test.ts
+  asr.test.ts
   validation.test.ts
   config.test.ts
   prompt.test.ts

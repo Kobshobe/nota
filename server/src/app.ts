@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import jwt from '@fastify/jwt';
 import Fastify, {
   LogController,
@@ -19,10 +20,13 @@ import {
 } from './lib/errors';
 import { verifyJwt } from './lib/jwt';
 import { createDeepSeekRuntime, type AgentRuntime } from './agent/runtime';
+import { transcribeAudio as runTranscription, type Transcript } from './asr/minimax';
+import { transcriptionFailed } from './lib/errors';
 import { registerAuthRoutes } from './auth';
 import { registerThreadRoutes } from './threads';
 import { registerItemRoutes } from './items';
 import { registerMessageRoutes } from './messages';
+import { recoverRecordings, registerRecordingRoutes } from './recordings';
 import { registerUsageRoutes } from './usage';
 import './types';
 
@@ -30,6 +34,7 @@ export interface BuildAppOptions {
   config?: AppConfig;
   databasePath?: string;
   runtime?: AgentRuntime;
+  transcribeAudio?: (filePath: string) => Promise<Transcript>;
   now?: () => Date;
   logger?: FastifyServerOptions['logger'];
 }
@@ -40,6 +45,18 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   migrateDb(db);
 
   const runtime = options.runtime ?? createDeepSeekRuntime(config);
+  const transcribeAudio =
+    options.transcribeAudio ??
+    ((filePath: string) => {
+      const apiKey = config.minimaxApiKey;
+      if (!apiKey) throw transcriptionFailed('MINIMAX_API_KEY is not configured');
+      return runTranscription({
+        apiKey,
+        baseUrl: config.minimaxAsrBaseUrl,
+        model: config.minimaxAsrModel,
+        filePath,
+      });
+    });
   const now = options.now ?? (() => new Date());
 
   const app = Fastify({
@@ -54,6 +71,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.decorate('db', db);
   app.decorate('sqlite', sqlite);
   app.decorate('runtime', runtime);
+  app.decorate('transcribeAudio', transcribeAudio);
   app.decorate('now', now);
   app.decorate('authenticate', async (request) => {
     await verifyJwt(request);
@@ -77,6 +95,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
     exposedHeaders: ['X-Request-Id', 'Retry-After'],
+  });
+  await app.register(multipart, {
+    limits: { fileSize: config.recordingMaxBytes, files: 1, fields: 8 },
   });
   await app.register(jwt, {
     secret: config.jwtSecret,
@@ -131,6 +152,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerMessageRoutes(app);
   registerItemRoutes(app);
   registerUsageRoutes(app);
+  registerRecordingRoutes(app);
+  await recoverRecordings(app);
 
   return app;
 }

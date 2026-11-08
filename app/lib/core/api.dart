@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../features/auth/models.dart';
 import '../features/chat/models.dart';
 import '../features/items/models.dart';
+import '../features/meeting/models.dart';
 import 'auth_store.dart';
 
 const String apiBaseUrl = String.fromEnvironment(
@@ -21,6 +22,7 @@ enum ApiErrorCode {
   unauthorized,
   notFound,
   quotaExceeded,
+  transcriptionFailed,
   internal,
   network,
   timeout,
@@ -32,6 +34,7 @@ enum ApiErrorCode {
     'UNAUTHORIZED' => ApiErrorCode.unauthorized,
     'NOT_FOUND' => ApiErrorCode.notFound,
     'QUOTA_EXCEEDED' => ApiErrorCode.quotaExceeded,
+    'TRANSCRIPTION_FAILED' => ApiErrorCode.transcriptionFailed,
     'INTERNAL' => ApiErrorCode.internal,
     _ => ApiErrorCode.unknown,
   };
@@ -68,6 +71,7 @@ class ApiException implements Exception {
         ApiErrorCode.unauthorized => '登录已过期，请重新登录',
         ApiErrorCode.notFound => '内容不存在或已被删除',
         ApiErrorCode.quotaExceeded => _quotaMessage,
+        ApiErrorCode.transcriptionFailed => '录音转写失败，请重试',
         ApiErrorCode.internal => '服务暂时不可用，请稍后重试',
         ApiErrorCode.network => '网络连接失败，请检查网络后重试',
         ApiErrorCode.timeout => '请求超时，请稍后重试',
@@ -289,6 +293,17 @@ abstract class NotaApi {
   Future<void> deleteItem(String itemId);
 
   Future<Usage> getUsage();
+
+  Future<Recording> uploadRecording({
+    required List<int> bytes,
+    required String filename,
+    required Duration duration,
+    void Function(int sent, int total)? onProgress,
+  });
+
+  Future<Recording> getRecording(String recordingId);
+
+  Future<Recording> retryRecording(String recordingId);
 }
 
 class ApiClient implements NotaApi {
@@ -463,6 +478,42 @@ class ApiClient implements NotaApi {
     return _request(
       () => _dio.get<dynamic>('/api/usage'),
       (data) => Usage.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  @override
+  Future<Recording> uploadRecording({
+    required List<int> bytes,
+    required String filename,
+    required Duration duration,
+    void Function(int sent, int total)? onProgress,
+  }) {
+    return _request(
+      () => _dio.post<dynamic>(
+        '/api/recordings',
+        data: FormData.fromMap({
+          'durationMs': duration.inMilliseconds.toString(),
+          'audio': MultipartFile.fromBytes(bytes, filename: filename),
+        }),
+        onSendProgress: onProgress,
+      ),
+      (data) => Recording.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  @override
+  Future<Recording> getRecording(String recordingId) {
+    return _request(
+      () => _dio.get<dynamic>('/api/recordings/$recordingId'),
+      (data) => Recording.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  @override
+  Future<Recording> retryRecording(String recordingId) {
+    return _request(
+      () => _dio.post<dynamic>('/api/recordings/$recordingId/retry'),
+      (data) => Recording.fromJson(data as Map<String, dynamic>),
     );
   }
 

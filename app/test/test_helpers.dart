@@ -11,6 +11,8 @@ import 'package:nota/core/notifications.dart';
 import 'package:nota/core/theme.dart';
 import 'package:nota/features/auth/models.dart';
 import 'package:nota/features/chat/models.dart';
+import 'package:nota/features/meeting/models.dart';
+import 'package:nota/features/meeting/recorder.dart';
 import 'package:nota/features/items/models.dart';
 
 class FakeNotificationService implements AppNotificationService {
@@ -190,6 +192,57 @@ class FakeApi implements NotaApi {
     );
   }
 
+  /// 上传接口的返回值；默认转写中。
+  Recording? uploadResult;
+
+  /// getRecording 依次返回这里的结果，耗尽后返回 completed。
+  final List<Recording> pollQueue = [];
+  int uploadCalls = 0;
+  int retryCalls = 0;
+  /// 还有几次上传要失败（用于验证失败后重传而不是重录）。
+  int failUploadTimes = 0;
+  List<int>? lastUploadBytes;
+  Duration? lastUploadDuration;
+
+  @override
+  Future<Recording> uploadRecording({
+    required List<int> bytes,
+    required String filename,
+    required Duration duration,
+    void Function(int sent, int total)? onProgress,
+  }) async {
+    uploadCalls += 1;
+    if (failUploadTimes > 0) {
+      failUploadTimes -= 1;
+      throw const ApiException(
+        code: ApiErrorCode.network,
+        message: 'upload failed',
+        retryable: true,
+      );
+    }
+    lastUploadBytes = bytes;
+    lastUploadDuration = duration;
+    onProgress?.call(bytes.length, bytes.length);
+    return uploadResult ??
+        const Recording(id: 'rec-1', status: RecordingState.transcribing);
+  }
+
+  @override
+  Future<Recording> getRecording(String recordingId) async {
+    if (pollQueue.isNotEmpty) return pollQueue.removeAt(0);
+    return Recording(
+      id: recordingId,
+      status: RecordingState.completed,
+      threadId: threads.isEmpty ? 'thread-1' : threads.first.id,
+    );
+  }
+
+  @override
+  Future<Recording> retryRecording(String recordingId) async {
+    retryCalls += 1;
+    return Recording(id: recordingId, status: RecordingState.transcribing);
+  }
+
   @override
   Future<List<Item>> listItems({ItemStatus? status, String? threadId}) async {
     return items
@@ -324,8 +377,22 @@ Widget testRoutedApp({
   FakeNotificationService? notifications,
   AuthStore? authStore,
   GoRouter? router,
+  /// 需要替换更多 provider 时传自己的容器（用 UncontrolledProviderScope 挂载）。
+  ProviderContainer? container,
 }) {
   final store = authStore ?? AuthStore(MemoryTokenStorage());
+  final app = MaterialApp.router(
+    debugShowCheckedModeBanner: false,
+    theme: buildTheme(),
+    locale: const Locale('zh', 'CN'),
+    supportedLocales: const [Locale('zh', 'CN')],
+    localizationsDelegates: GlobalMaterialLocalizations.delegates,
+    routerConfig:
+        router ?? GoRouter(initialLocation: initialLocation, routes: routes),
+  );
+  if (container != null) {
+    return UncontrolledProviderScope(container: container, child: app);
+  }
   return ProviderScope(
     overrides: [
       apiProvider.overrideWithValue(api),
@@ -334,15 +401,7 @@ Widget testRoutedApp({
         notifications ?? FakeNotificationService(),
       ),
     ],
-    child: MaterialApp.router(
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      locale: const Locale('zh', 'CN'),
-      supportedLocales: const [Locale('zh', 'CN')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      routerConfig:
-          router ?? GoRouter(initialLocation: initialLocation, routes: routes),
-    ),
+    child: app,
   );
 }
 
@@ -357,4 +416,65 @@ Future<void> pumpUntil(
     if (finder.evaluate().isNotEmpty) return;
   }
   fail('等待 $finder 超时');
+}
+
+
+/// 测试用录音器：不碰麦克风，返回固定路径。
+class FakeRecorder implements MeetingRecorder {
+  FakeRecorder({this.permission = true, this.path = 'fake-audio'});
+
+  bool permission;
+  String? path;
+  bool started = false;
+  bool paused = false;
+  bool canceled = false;
+  int startCalls = 0;
+  int stopCalls = 0;
+  Object? startError;
+
+  final _levels = StreamController<RecordingLevel>.broadcast();
+
+  void emitLevel(double level) => _levels.add(level);
+
+  @override
+  Future<bool> hasPermission() async => permission;
+
+  @override
+  Future<void> start() async {
+    if (startError != null) throw startError!;
+    startCalls += 1;
+    started = true;
+    paused = false;
+  }
+
+  @override
+  Future<void> pause() async {
+    paused = true;
+  }
+
+  @override
+  Future<void> resume() async {
+    paused = false;
+  }
+
+  @override
+  Future<String?> stop() async {
+    stopCalls += 1;
+    started = false;
+    return path;
+  }
+
+  @override
+  Future<void> cancel() async {
+    canceled = true;
+    started = false;
+  }
+
+  @override
+  Stream<RecordingLevel> get levels => _levels.stream;
+
+  @override
+  Future<void> dispose() async {
+    await _levels.close();
+  }
 }

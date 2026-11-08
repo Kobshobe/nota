@@ -28,6 +28,13 @@ export interface AppConfig {
   deepseekApiKey?: string;
   deepseekBaseUrl: string;
   deepseekModel: string;
+  minimaxApiKey?: string;
+  minimaxAsrBaseUrl: string;
+  minimaxAsrModel: string;
+  recordingMaxSeconds: number;
+  recordingMaxBytes: number;
+  recordingRetentionHours: number;
+  recordingsPath: string;
   logLevel: LogLevel;
   logFormat: LogFormat;
 }
@@ -60,6 +67,22 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     throw new Error(`QUOTA_TIMEZONE is not a valid IANA time zone: ${quotaTimezone}`);
   }
 
+  const recordingMaxSeconds = parseInteger(env.RECORDING_MAX_SECONDS, 480, 'RECORDING_MAX_SECONDS');
+  if (recordingMaxSeconds > 500) {
+    throw new Error('RECORDING_MAX_SECONDS must not exceed 500: the transcription provider rejects longer audio.');
+  }
+  const recordingMaxBytes = parseInteger(
+    env.RECORDING_MAX_BYTES,
+    12 * 1024 * 1024,
+    'RECORDING_MAX_BYTES',
+  );
+  const recordingRetentionHours = parseInteger(
+    env.RECORDING_RETENTION_HOURS,
+    24,
+    'RECORDING_RETENTION_HOURS',
+  );
+  const recordingsPath = path.resolve(root, env.RECORDINGS_PATH?.trim() || './data/recordings');
+
   const logLevel = (env.LOG_LEVEL?.trim() || 'info') as LogLevel;
   if (!LOG_LEVELS.includes(logLevel)) {
     throw new Error(`LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}.`);
@@ -80,6 +103,13 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     deepseekApiKey: env.DEEPSEEK_API_KEY?.trim() || undefined,
     deepseekBaseUrl: env.DEEPSEEK_BASE_URL?.trim() || 'https://api.deepseek.com',
     deepseekModel: env.DEEPSEEK_MODEL?.trim() || 'deepseek-flash',
+    minimaxApiKey: env.MINIMAX_API_KEY?.trim() || undefined,
+    minimaxAsrBaseUrl: env.MINIMAX_ASR_BASE_URL?.trim() || 'https://api.minimax.cn',
+    minimaxAsrModel: env.MINIMAX_ASR_MODEL?.trim() || 'asr-1.0',
+    recordingMaxSeconds,
+    recordingMaxBytes,
+    recordingRetentionHours,
+    recordingsPath,
     logLevel,
     logFormat,
   };
