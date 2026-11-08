@@ -189,6 +189,13 @@ server/test/
 - 订阅 `tool_execution_end` 收集工具轨迹；运行结束后把 assistant 消息、payload、tool_calls 与幂等响一并落库；v1 同步，P1 再 SSE。
 - DeepSeek 用 `deepseekProvider()` + `deepseek-flash`；`thinkingLevel` 先 `low`。
 
+### 5.6 设备（模拟器）
+
+- 设备端在 `device/`：Arduino 固件、Wokwi 电路、运行手册。
+- 设备身份：`devices` 存 token hash，明文只在 seed 输出；设备用 Bearer。
+- 设备音频用内嵌 MP3，I2S 不在模拟范围；`setInsecure()` 只用于本地隧道；链路是 202 + 轮询 → ASR → 日常 thread → Agent → TTS。
+- 固件手动在 Wokwi 验收；服务端测试覆盖主路径与失败路径。
+
 ## 6. 测试
 
 ### 6.1 原则

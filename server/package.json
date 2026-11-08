@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate.ts"
+    "db:migrate": "tsx src/db/migrate.ts",
+    "seed:device": "tsx src/scripts/seed-device.ts"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.5.0",

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { eq } from 'drizzle-orm';
 import { createModels } from '@earendil-works/pi-ai';
 import {
   fauxAssistantMessage,
@@ -15,6 +16,8 @@ import { buildApp } from '../src/app';
 import type { AppConfig } from '../src/config';
 import type { AgentRuntime } from '../src/agent/runtime';
 import type { Transcript } from '../src/asr/minimax';
+import { createDeviceRecord } from '../src/devices';
+import { users } from '../src/db/schema';
 
 export interface TestContext {
   app: FastifyInstance;
@@ -31,12 +34,16 @@ export interface TestAppOptions {
   apiKey?: string | null;
   now?: Date;
   logger?: FastifyServerOptions['logger'];
+  /** 默认 5 MB；调小用于覆盖 413。 */
+  deviceMaxBytes?: number;
   /** 默认返回一段固定的双人对话；传 null 表示转写总是失败。 */
   transcript?: Transcript | null;
   /** 完全自定义转写，优先级高于 transcript。 */
   transcribe?: (filePath: string) => Promise<Transcript>;
   /** 覆盖音频准备（转码）步骤；默认原样返回。 */
   prepareAudio?: (filePath: string) => Promise<string>;
+  /** 覆盖 TTS；默认返回一段假的 mp3 字节。 */
+  synthesizeSpeech?: (text: string) => Promise<Buffer>;
 }
 
 export const DEFAULT_TRANSCRIPT: Transcript = {
@@ -72,6 +79,15 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     recordingRetentionHours: 24,
     recordingsPath: path.join(dir, 'recordings'),
     ffmpegPath: 'ffmpeg',
+    deviceMaxSeconds: 60,
+    deviceMaxBytes: options.deviceMaxBytes ?? 5 * 1024 * 1024,
+    deviceUploadsPath: path.join(dir, 'device-uploads'),
+    minimaxTtsBaseUrl: 'https://api.minimax.cn',
+    minimaxTtsModel: 'speech-2.8-hd',
+    minimaxTtsVoice: 'female-yujie',
+    ttsMaxChars: 200,
+    ttsPath: path.join(dir, 'tts'),
+    ttsRetentionHours: 1,
     logLevel: 'silent',
     logFormat: 'json',
   };
@@ -91,6 +107,8 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     databasePath,
     runtime,
     prepareAudio: options.prepareAudio ?? (async (filePath) => filePath),
+    synthesizeSpeech:
+      options.synthesizeSpeech ?? (async () => Buffer.from('fake-mp3-bytes')),
     transcribeAudio:
       options.transcribe ??
       (async () => {
@@ -246,4 +264,19 @@ export function finishWith(
 
 export function textOnly(text: string) {
   return fauxAssistantMessage(text);
+}
+
+export async function createDevice(
+  ctx: TestContext,
+  email = 'user@example.com',
+  name = '测试设备',
+): Promise<{ id: string; token: string; userId: string }> {
+  const user = ctx.app.db.select().from(users).where(eq(users.email, email)).get();
+  if (!user) throw new Error(`user missing: ${email}`);
+  const { device, token } = createDeviceRecord(ctx.app.db, {
+    userId: user.id,
+    name,
+    now: ctx.currentNow,
+  });
+  return { id: device.id, token, userId: user.id };
 }

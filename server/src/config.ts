@@ -36,6 +36,15 @@ export interface AppConfig {
   recordingRetentionHours: number;
   recordingsPath: string;
   ffmpegPath: string;
+  deviceMaxSeconds: number;
+  deviceMaxBytes: number;
+  deviceUploadsPath: string;
+  minimaxTtsBaseUrl: string;
+  minimaxTtsModel: string;
+  minimaxTtsVoice: string;
+  ttsMaxChars: number;
+  ttsPath: string;
+  ttsRetentionHours: number;
   logLevel: LogLevel;
   logFormat: LogFormat;
 }
@@ -85,6 +94,22 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   const recordingsPath = path.resolve(root, env.RECORDINGS_PATH?.trim() || './data/recordings');
   const ffmpegPath = env.FFMPEG_PATH?.trim() || 'ffmpeg';
 
+  const deviceMaxSeconds = parseInteger(env.DEVICE_MAX_SECONDS, 60, 'DEVICE_MAX_SECONDS');
+  if (deviceMaxSeconds > 60) {
+    throw new Error('DEVICE_MAX_SECONDS must not exceed 60: the device protocol caps one utterance at 60 seconds.');
+  }
+  const deviceMaxBytes = parseInteger(env.DEVICE_MAX_BYTES, 5 * 1024 * 1024, 'DEVICE_MAX_BYTES');
+  const deviceUploadsPath = path.resolve(
+    root,
+    env.DEVICE_UPLOADS_PATH?.trim() || './data/device-uploads',
+  );
+  const minimaxTtsBaseUrl = env.MINIMAX_TTS_BASE_URL?.trim() || 'https://api.minimax.cn';
+  const minimaxTtsModel = env.MINIMAX_TTS_MODEL?.trim() || 'speech-2.8-hd';
+  const minimaxTtsVoice = env.MINIMAX_TTS_VOICE?.trim() || 'female-yujie';
+  const ttsMaxChars = parseInteger(env.TTS_MAX_CHARS, 200, 'TTS_MAX_CHARS');
+  const ttsPath = path.resolve(root, env.TTS_PATH?.trim() || './data/tts');
+  const ttsRetentionHours = parseInteger(env.TTS_RETENTION_HOURS, 1, 'TTS_RETENTION_HOURS');
+
   const logLevel = (env.LOG_LEVEL?.trim() || 'info') as LogLevel;
   if (!LOG_LEVELS.includes(logLevel)) {
     throw new Error(`LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}.`);
@@ -113,6 +138,15 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     recordingRetentionHours,
     recordingsPath,
     ffmpegPath,
+    deviceMaxSeconds,
+    deviceMaxBytes,
+    deviceUploadsPath,
+    minimaxTtsBaseUrl,
+    minimaxTtsModel,
+    minimaxTtsVoice,
+    ttsMaxChars,
+    ttsPath,
+    ttsRetentionHours,
     logLevel,
     logFormat,
   };

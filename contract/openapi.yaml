@@ -1,18 +1,19 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.5.0
+  version: 0.6.0
   description: |
     Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
     通用约定：
-    - 请求与响应体都是 JSON；请求的 Content-Type 必须是 application/json。
-    - 除登录和健康检查外，所有接口要求 Authorization: Bearer <JWT>。
+    - 除设备音频上传外，请求与响应体都是 JSON；设备音频上传用 multipart/form-data。
+    - 除登录、健康检查和设备接口外，所有接口要求 Authorization: Bearer <JWT>；设备接口使用设备 token，见 securitySchemes.deviceAuth。
     - 每个响应带 X-Request-Id；错误体带 requestId。
     - 错误响应恒为 {code, message, details?, requestId}；code 只能取 ErrorResponse 枚举里的值。
     - 单次文字输入上限 20,000 字符。
     - 写消息带 clientMessageId；同键重试返回原结果，不重复创建或扣额度。
     - 会议录音单次上限 8 分钟（480 秒）；转写在服务端异步完成，成功后才会创建会议。
+    - 设备语音默认上限 60 秒 / 5 MB（服务端可调小）；转写、Agent 和 TTS 在服务端异步完成，成功后写入日常 thread。
 security:
   - bearerAuth: []
 servers:
@@ -26,6 +27,7 @@ tags:
   - name: items
   - name: usage
   - name: recordings
+  - name: devices
 paths:
   /api/health:
     get:
@@ -251,6 +253,100 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/device/utterances:
+    post:
+      tags: [devices]
+      operationId: uploadDeviceUtterance
+      summary: 设备上传一段语音并开始异步处理
+      description: 转写成功后写入设备所属用户的日常 thread，再由 Agent 处理并生成语音回复；额度在同一路径上扣减。
+      security:
+        - deviceAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [audio]
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                  description: mp3 / wav / m4a 等，默认上限 5 MB
+                durationMs:
+                  type: integer
+                  minimum: 1
+                  maximum: 60000
+                  description: 设备测得的时长；服务端仍会按转写时长复核
+      responses:
+        '202':
+          description: 已接收，处理中
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceUtterance'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          description: 音频超过上限（默认 5 MB）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: 音频格式不受支持
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/device/utterances/{utteranceId}:
+    get:
+      tags: [devices]
+      operationId: getDeviceUtterance
+      summary: 查询设备语音的处理状态
+      security:
+        - deviceAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UtteranceId'
+      responses:
+        '200':
+          description: 当前状态；completed 时带回复文本，TTS 成功时带回复音频地址
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceUtterance'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/device/utterances/{utteranceId}/reply-audio:
+    get:
+      tags: [devices]
+      operationId: getDeviceUtteranceReplyAudio
+      summary: 下载合成好的语音回复
+      description: 仅在 completed 且 TTS 成功时可用；音频默认保留 1 小时（服务端可配）。
+      security:
+        - deviceAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UtteranceId'
+      responses:
+        '200':
+          description: mp3 音频
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/items:
     get:
       tags: [items]
@@ -387,6 +483,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    deviceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: DeviceToken
+      description: 设备 token；只在设备接口使用，由 seed 脚本签发。服务端只存哈希。
   parameters:
     ThreadId:
       name: threadId
@@ -402,6 +503,12 @@ components:
         type: string
     RecordingId:
       name: recordingId
+      in: path
+      required: true
+      schema:
+        type: string
+    UtteranceId:
+      name: utteranceId
       in: path
       required: true
       schema:
@@ -768,6 +875,29 @@ components:
           type: string
           enum: [TRANSCRIPTION_FAILED, QUOTA_EXCEEDED, INTERRUPTED]
           description: 仅 failed 时存在；INTERRUPTED 表示服务重启打断了任务
+        createdAt:
+          type: string
+          format: date-time
+    DeviceUtterance:
+      type: object
+      additionalProperties: false
+      required: [id, status, createdAt]
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [processing, completed, failed]
+        replyText:
+          type: string
+          description: 仅 completed 时存在；设备播放用的截断文本，不超过 TTS_MAX_CHARS（默认 200）
+        replyAudioUrl:
+          type: string
+          description: 仅 completed 且 TTS 成功时存在；相对路径，需带设备 token 下载
+        errorCode:
+          type: string
+          enum: [TRANSCRIPTION_FAILED, QUOTA_EXCEEDED, AGENT_FAILED, INTERRUPTED]
+          description: 仅 failed 时存在；AGENT_FAILED 表示 Agent 阶段失败
         createdAt:
           type: string
           format: date-time

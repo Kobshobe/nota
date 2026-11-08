@@ -139,6 +139,52 @@ export const recordings = sqliteTable(
   ],
 );
 
+export const devices = sqliteTable(
+  'devices',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    createdAt: text('created_at').notNull(),
+    revokedAt: text('revoked_at'),
+  },
+  (table) => [index('devices_user_idx').on(table.userId)],
+);
+
+export const deviceUtterances = sqliteTable(
+  'device_utterances',
+  {
+    id: text('id').primaryKey(),
+    deviceId: text('device_id')
+      .notNull()
+      .references(() => devices.id, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: ['processing', 'completed', 'failed'] }).notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    durationMs: integer('duration_ms'),
+    audioPath: text('audio_path'),
+    transcriptJson: text('transcript_json'),
+    replyText: text('reply_text'),
+    replyAudioPath: text('reply_audio_path'),
+    errorCode: text('error_code', {
+      enum: ['TRANSCRIPTION_FAILED', 'QUOTA_EXCEEDED', 'AGENT_FAILED', 'INTERRUPTED'],
+    }),
+    errorMessage: text('error_message'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    index('device_utterances_device_created_idx').on(table.deviceId, table.createdAt),
+    index('device_utterances_status_idx').on(table.status),
+  ],
+);
+
 export type UserRow = typeof users.$inferSelect;
 export type ThreadRow = typeof threads.$inferSelect;
 export type MessageRow = typeof messages.$inferSelect;
@@ -146,3 +192,5 @@ export type ItemRow = typeof items.$inferSelect;
 export type ToolCallRow = typeof toolCalls.$inferSelect;
 export type UsageDailyRow = typeof usageDaily.$inferSelect;
 export type RecordingRow = typeof recordings.$inferSelect;
+export type DeviceRow = typeof devices.$inferSelect;
+export type DeviceUtteranceRow = typeof deviceUtterances.$inferSelect;
