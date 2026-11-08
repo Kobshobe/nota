@@ -60,6 +60,8 @@ class _NewMeetingScreenState extends ConsumerState<NewMeetingScreen> {
     _pendingContent = content;
     _pendingClientMessageId = clientMessageId;
 
+    // 先清空，失败再还原，和主对话保持一致。
+    _input.clear();
     setState(() {
       _sending = true;
       _error = null;
@@ -99,12 +101,15 @@ class _NewMeetingScreenState extends ConsumerState<NewMeetingScreen> {
       unawaited(threads.refresh());
       unawaited(items.refresh());
       if (!mounted) return;
-      _input.clear();
       context.pushReplacement('/chat/$threadId');
     } on ApiException catch (error) {
-      if (mounted) setState(() => _error = error);
+      if (mounted) {
+        if (_input.text.isEmpty) _input.text = content;
+        setState(() => _error = error);
+      }
     } catch (_) {
       if (mounted) {
+        if (_input.text.isEmpty) _input.text = content;
         setState(
           () => _error = const ApiException(
             code: ApiErrorCode.unknown,

@@ -71,12 +71,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _send() async {
     final content = _inputController.text;
     if (content.trim().isEmpty || content.length > maxMessageLength) return;
+    // 先清空，失败再还原：AI 要几秒，等响应回来才清会像「发了但没清」。
+    _inputController.clear();
     final ok = await ref
         .read(chatProvider(widget.threadId).notifier)
         .send(content);
     if (!mounted) return;
-    if (ok && _inputController.text == content) {
-      _inputController.clear();
+    if (!ok && _inputController.text.isEmpty) {
+      _inputController.text = content;
+      _inputController.selection = TextSelection.collapsed(
+        offset: content.length,
+      );
     }
   }
 
