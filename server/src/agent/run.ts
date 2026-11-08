@@ -10,6 +10,12 @@ import type { AgentRuntime } from './runtime';
 import { buildSystemPrompt } from './prompt';
 import { createAgentTools } from './tools';
 import { Staging } from './staging';
+import { formatToolEnd, formatToolStart, sanitizeLogText } from './tool-log';
+
+export interface RunLogger {
+  info(fields: Record<string, unknown>, message: string): void;
+  warn(fields: Record<string, unknown>, message: string): void;
+}
 
 const ZERO_USAGE: Usage = {
   input: 0,
@@ -40,6 +46,7 @@ export interface RunAgentInput {
   userMessageId: string;
   userText: string;
   now: Date;
+  log?: RunLogger;
 }
 
 export interface AgentRunResult {
@@ -49,7 +56,25 @@ export interface AgentRunResult {
 }
 
 export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
-  const { db, runtime, thread, userMessageId, userText, now } = input;
+  const { db, runtime, thread, userMessageId, userText, now, log } = input;
+  const runStartedAt = Date.now();
+  // 格式化与写日志一起兜住：日志出问题也不能让一次运行失败。
+  const logInfo = (fields: Record<string, unknown>, line: () => string) => {
+    try {
+      log?.info(fields, line());
+    } catch {
+      // 忽略。
+    }
+  };
+  const logWarn = (fields: Record<string, unknown>, line: () => string) => {
+    try {
+      log?.warn(fields, line());
+    } catch {
+      // 忽略。
+    }
+  };
+
+  logInfo({ threadId: thread.id, userMessageId }, () => `agent 运行开始 ${userText.length} 字`);
 
   const openItems = db
     .select()
@@ -70,7 +95,8 @@ export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
 
   const staging = new Staging(db, thread.userId, thread.id, now);
   const toolCalls: ToolTrace[] = [];
-  const pending = new Map<string, Record<string, unknown>>();
+  const pending = new Map<string, { name: ToolName; args: Record<string, unknown> }>();
+  const startedAt = new Map<string, number>();
 
   const agent = new Agent({
     initialState: {
@@ -92,19 +118,30 @@ export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
 
   agent.subscribe((event) => {
     if (event.type === 'tool_execution_start') {
-      pending.set(event.toolCallId, asObject(event.args));
+      const name = event.toolName as ToolName;
+      const args = asObject(event.args);
+      pending.set(event.toolCallId, { name, args });
+      startedAt.set(event.toolCallId, Date.now());
+      logInfo({ tool: name }, () => formatToolStart(name, args));
       return;
     }
     if (event.type !== 'tool_execution_end') return;
+    const name = event.toolName as ToolName;
+    const result = traceResult(event.result, event.isError);
+    const durationMs = Date.now() - (startedAt.get(event.toolCallId) ?? Date.now());
+    const fields = { tool: name, durationMs, isError: event.isError };
+    if (event.isError) logWarn(fields, () => formatToolEnd(name, result, true, durationMs));
+    else logInfo(fields, () => formatToolEnd(name, result, false, durationMs));
     toolCalls.push({
       id: randomUUID(),
-      name: event.toolName as ToolName,
-      arguments: pending.get(event.toolCallId) ?? {},
-      result: traceResult(event.result, event.isError),
+      name,
+      arguments: pending.get(event.toolCallId)?.args ?? {},
+      result,
       isError: event.isError,
       createdAt: now.toISOString(),
     });
     pending.delete(event.toolCallId);
+    startedAt.delete(event.toolCallId);
   });
 
   try {
@@ -112,18 +149,61 @@ export async function runAgent(input: RunAgentInput): Promise<AgentRunResult> {
   } catch (error) {
     // finish may have staged just before a late provider/event failure; let the caller commit or roll back.
     const payload = staging.getFinishPayload();
-    if (payload) return { payload, toolCalls, staging };
-    throw new AgentRunError('failed', 'Agent run failed', { cause: error });
+    if (payload) {
+      logWarn(
+        { threadId: thread.id },
+        () => withUnfinished(`agent 运行中断，沿用已暂存结果（${toolCalls.length} 次工具调用）`, pending),
+      );
+      return { payload, toolCalls, staging };
+    }
+    logWarn(
+      { threadId: thread.id },
+      () =>
+        withUnfinished(
+          `agent 运行失败：${errorDetail(error)}（${toolCalls.length} 次工具调用，${formatDuration(Date.now() - runStartedAt)}）`,
+          pending,
+        ),
+    );
+    throw new AgentRunError('failed', `Agent run failed: ${errorDetail(error)}`, { cause: error });
   }
 
   const payload = staging.getFinishPayload();
   if (!payload) {
-    const detail = agent.state.errorMessage;
-    if (detail) throw new AgentRunError('failed', 'Agent run failed');
+    // 模型/供应商失败时 pi-agent 会正常 resolve，真实原因只在 errorMessage 里。
+    const reason = agent.state.errorMessage ? sanitizeLogText(agent.state.errorMessage) : '';
+    logWarn(
+      { threadId: thread.id },
+      () =>
+        withUnfinished(
+          reason
+            ? `agent 运行失败：${reason}（${toolCalls.length} 次工具调用，${formatDuration(Date.now() - runStartedAt)}）`
+            : `agent 运行结束但未调用 finish（${toolCalls.length} 次工具调用，${formatDuration(Date.now() - runStartedAt)}）`,
+          pending,
+        ),
+    );
+    if (reason) throw new AgentRunError('failed', `Agent run failed: ${reason}`);
     throw new AgentRunError('unfinished', 'Agent did not finish');
   }
 
+  logInfo(
+    { threadId: thread.id },
+    () => `agent 运行结束 ${toolCalls.length} 次工具调用 ${formatDuration(Date.now() - runStartedAt)}`,
+  );
   return { payload, toolCalls, staging };
+}
+
+function formatDuration(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** 运行被中断时，工具可能只有开始没有结束，日志里补一句。 */
+function withUnfinished(message: string, pending: Map<string, { name: ToolName }>): string {
+  const names = [...pending.values()].map((entry) => entry.name);
+  return names.length > 0 ? `${message}，未结束：${names.join('、')}` : message;
+}
+
+function errorDetail(error: unknown): string {
+  return sanitizeLogText(error instanceof Error ? error.message : String(error));
 }
 
 function toAgentMessage(row: MessageRow, runtime: AgentRuntime): AgentMessage {

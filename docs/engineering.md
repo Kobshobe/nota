@@ -125,6 +125,7 @@ server/src/
   agent/
     run.ts      pi-agent-core 组装、事件
     tools.ts    5 个工具 + finish
+    tool-log.ts 工具调用的一行中文日志
     prompt.ts   system prompt
     staging.ts  写操作暂存/提交
 server/test/
@@ -136,6 +137,8 @@ server/test/
   validation.test.ts
   config.test.ts
   prompt.test.ts
+  agent-log.test.ts
+  tool-log.test.ts
   contract-message.test.ts
 ```
 
@@ -156,9 +159,14 @@ server/test/
 
 - 领域层抛 `AppError`（code / status / message / details）。
 - 全局 error handler 统一转成第 3 节错误体；Zod 失败 → `INVALID_INPUT`；JWT 失败 → `UNAUTHORIZED`；未知 → `INTERNAL`。
-- pino 记录 requestId、code、status；不记录密码、token、完整会议内容。
+- pino 记录 requestId、code、status（`LOG_FORMAT=json` 可见）；不记录密码、token、完整会议内容。
 
-### 5.4 Agent
+### 5.4 日志
+
+- 每次 Agent 运行打运行开始/结束和每个工具一行中文摘要：`▶ create_item 标题=「买牛奶」 类型=待办`、`✔ create_item 已暂存 new_1（待办） 3ms`；参数和结果不序列化成 JSON，换行压成一行。
+- 终端默认 pretty（隐藏 `tool`/`durationMs`/`isError`/`reqId`）；`LOG_FORMAT=json` 输出 pino 原始 JSON 且保留这些字段，`LOG_LEVEL` 控级别，非法值启动即失败。
+
+### 5.5 Agent
 
 - 用 `pi-agent-core` + `pi-ai` + `pi-schema`，不用 `pi-coding-agent`。
 - 每次请求新建 `Agent`，从 SQLite 恢复 messages；`sessionId` 用 thread id。

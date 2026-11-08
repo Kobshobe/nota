@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
 import Fastify, {
+  LogController,
   type FastifyInstance,
   type FastifyServerOptions,
 } from 'fastify';
@@ -45,6 +46,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     logger: options.logger ?? false,
     genReqId: () => `req_${randomUUID()}`,
     bodyLimit: 2 * 1024 * 1024,
+    // Fastify 默认每个请求打 incoming/completed 两条；改用 onResponse 里的一行。
+    logController: new LogController({ disableRequestLogging: true }),
   });
 
   app.decorate('config', config);
@@ -58,6 +61,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   app.addHook('onRequest', async (request, reply) => {
     reply.header('x-request-id', request.id);
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    if (request.url === '/api/health') return;
+    request.log.info(
+      `${request.method} ${request.url} → ${reply.statusCode} ${Math.round(reply.elapsedTime)}ms`,
+    );
   });
   app.addHook('onClose', async () => {
     sqlite.close();

@@ -130,6 +130,7 @@ export function registerMessageRoutes(app: FastifyInstance): void {
         userMessageId: userMessage.id,
         userText: body.content,
         now,
+        log: request.log,
       }).catch(async (error: unknown) => {
         request.log.error(
           {

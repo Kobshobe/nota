@@ -10,7 +10,7 @@ import {
   fauxToolCall,
   type FauxProviderHandle,
 } from '@earendil-works/pi-ai/providers/faux';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyServerOptions } from 'fastify';
 import { buildApp } from '../src/app';
 import type { AppConfig } from '../src/config';
 import type { AgentRuntime } from '../src/agent/runtime';
@@ -29,6 +29,7 @@ export interface TestAppOptions {
   dailyLimit?: number;
   apiKey?: string | null;
   now?: Date;
+  logger?: FastifyServerOptions['logger'];
 }
 
 export async function createTestApp(options: TestAppOptions = {}): Promise<TestContext> {
@@ -46,6 +47,8 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     deepseekApiKey: options.apiKey === null ? undefined : (options.apiKey ?? 'test-deepseek-key'),
     deepseekBaseUrl: 'https://api.deepseek.com',
     deepseekModel: 'deepseek-flash',
+    logLevel: 'silent',
+    logFormat: 'json',
   };
 
   const faux = fauxProvider();
@@ -63,7 +66,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     databasePath,
     runtime,
     now: () => clock.current,
-    logger: false,
+    logger: options.logger ?? false,
   });
 
   return {

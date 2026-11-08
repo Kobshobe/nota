@@ -4,6 +4,19 @@ import { fileURLToPath } from 'node:url';
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
+export type LogFormat = 'pretty' | 'json';
+export type LogLevel = 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
+
+export const LOG_LEVELS: readonly LogLevel[] = [
+  'fatal',
+  'error',
+  'warn',
+  'info',
+  'debug',
+  'trace',
+  'silent',
+];
+
 export interface AppConfig {
   repoRoot: string;
   port: number;
@@ -15,6 +28,8 @@ export interface AppConfig {
   deepseekApiKey?: string;
   deepseekBaseUrl: string;
   deepseekModel: string;
+  logLevel: LogLevel;
+  logFormat: LogFormat;
 }
 
 export interface LoadConfigOptions {
@@ -45,6 +60,15 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     throw new Error(`QUOTA_TIMEZONE is not a valid IANA time zone: ${quotaTimezone}`);
   }
 
+  const logLevel = (env.LOG_LEVEL?.trim() || 'info') as LogLevel;
+  if (!LOG_LEVELS.includes(logLevel)) {
+    throw new Error(`LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}.`);
+  }
+  const logFormat = env.LOG_FORMAT?.trim() || 'pretty';
+  if (logFormat !== 'pretty' && logFormat !== 'json') {
+    throw new Error('LOG_FORMAT must be "pretty" or "json".');
+  }
+
   return {
     repoRoot: root,
     port,
@@ -56,6 +80,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     deepseekApiKey: env.DEEPSEEK_API_KEY?.trim() || undefined,
     deepseekBaseUrl: env.DEEPSEEK_BASE_URL?.trim() || 'https://api.deepseek.com',
     deepseekModel: env.DEEPSEEK_MODEL?.trim() || 'deepseek-flash',
+    logLevel,
+    logFormat,
   };
 }
 

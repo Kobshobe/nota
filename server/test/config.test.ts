@@ -79,4 +79,22 @@ describe('场景：配置 · JWT_SECRET 必填', () => {
       loadConfig({ root: dir, env: { JWT_SECRET: 'x', JWT_EXPIRES_IN: 'forever' } }),
     ).toThrow(/JWT_EXPIRES_IN/);
   });
+
+  it('日志默认人类可读，可显式切回 JSON，非法值启动即抛错', () => {
+    const dir = tempDir();
+    const env = { JWT_SECRET: 'x' };
+
+    // then：默认 pretty
+    expect(loadConfig({ root: dir, env }).logFormat).toBe('pretty');
+    expect(loadConfig({ root: dir, env }).logLevel).toBe('info');
+
+    // when：显式指定
+    const json = loadConfig({ root: dir, env: { ...env, LOG_FORMAT: 'json', LOG_LEVEL: 'debug' } });
+
+    // then
+    expect(json.logFormat).toBe('json');
+    expect(json.logLevel).toBe('debug');
+    expect(() => loadConfig({ root: dir, env: { ...env, LOG_FORMAT: 'xml' } })).toThrow(/LOG_FORMAT/);
+    expect(() => loadConfig({ root: dir, env: { ...env, LOG_LEVEL: 'loud' } })).toThrow(/LOG_LEVEL/);
+  });
 });

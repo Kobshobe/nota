@@ -1,11 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../../core/theme.dart';
 import '../../shared/format.dart';
 import '../items/models.dart';
 import 'models.dart';
+import 'tool_trace_fields.dart';
 
 typedef AddCandidateAction = Future<bool> Function(
   CandidateAction action,
@@ -446,6 +445,8 @@ class ToolTrace extends StatelessWidget {
   }
 
   void _showToolCall(BuildContext context, ToolCall call) {
+    final arguments = describeToolArguments(call.arguments);
+    final result = describeToolResult(call.result);
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -455,24 +456,20 @@ class ToolTrace extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                '参数',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                const JsonEncoder.withIndent('  ').convert(call.arguments),
-                style: const TextStyle(fontSize: 12, height: 1.5),
-              ),
-              const SizedBox(height: 14),
-              const Text(
-                '结果',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
-              const SizedBox(height: 4),
-              SelectableText(
-                const JsonEncoder.withIndent('  ').convert(call.result),
-                style: const TextStyle(fontSize: 12, height: 1.5),
+              if (arguments.isNotEmpty)
+                _ToolFieldSection(title: '参数', fields: arguments),
+              if (arguments.isNotEmpty && result.isNotEmpty)
+                const SizedBox(height: 16),
+              if (result.isNotEmpty) _ToolFieldSection(title: '结果', fields: result),
+              if (arguments.isEmpty && result.isEmpty)
+                const Text(
+                  '这次调用没有参数和返回内容',
+                  style: TextStyle(fontSize: 13, color: AppColors.muted),
+                ),
+              const SizedBox(height: 16),
+              Text(
+                '执行于 ${formatDateTime(call.createdAt)}',
+                style: const TextStyle(fontSize: 12, color: AppColors.muted),
               ),
             ],
           ),
@@ -484,6 +481,54 @@ class ToolTrace extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ToolFieldSection extends StatelessWidget {
+  const _ToolFieldSection({required this.title, required this.fields});
+
+  final String title;
+  final List<ToolTraceField> fields;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        ),
+        const SizedBox(height: 6),
+        for (final field in fields)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 76,
+                  child: Text(
+                    field.label,
+                    style: const TextStyle(fontSize: 12, color: AppColors.muted),
+                  ),
+                ),
+                Expanded(
+                  child: SelectableText(
+                    field.value,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.45,
+                      color: field.label == '错误' ? AppColors.danger : AppColors.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

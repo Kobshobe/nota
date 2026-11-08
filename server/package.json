@@ -21,8 +21,9 @@
     "@fastify/jwt": "^9.1.0",
     "better-sqlite3": "^11.10.0",
     "drizzle-orm": "^0.44.7",
-    "fastify": "^5.6.2",
+    "fastify": "^5.12.8",
     "pino": "^9.14.0",
+    "pino-pretty": "^13.2.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
