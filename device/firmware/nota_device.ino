@@ -15,7 +15,7 @@ const int WIFI_CHANNEL = 6;
 const int BUTTON_PIN = 4;
 const int LED_PIN = 5;
 const unsigned long MAX_RECORDING_MS = 480000UL;
-const unsigned long FIXTURE_DURATION_MS = 22467UL;
+const unsigned long FIXTURE_DURATION_MS = 3228UL;
 const unsigned long POLL_INTERVAL_MS = 5000UL;
 const unsigned long POLL_TIMEOUT_MS = 300000UL;
 const unsigned long FAIL_BLINK_MS = 10000UL;
@@ -27,6 +27,7 @@ enum DeviceState { IDLE, RECORDING, UPLOADING };
 String baseUrl;
 String deviceToken;
 WiFiClientSecure tls;
+WiFiClient plain;
 DeviceState state = IDLE;
 bool hasPending = false;
 String pendingId;
@@ -186,11 +187,19 @@ bool readConfig() {
   }
 }
 
+bool beginRequest(HTTPClient& http, const String& url) {
+  if (url.startsWith("https://")) {
+    tls.setInsecure();
+    return http.begin(tls, url);
+  }
+  return http.begin(plain, url);
+}
+
 bool httpPost(const String& url, std::vector<uint8_t>& body, String& response, int& code) {
   HTTPClient http;
   http.setTimeout(60000);
   http.setConnectTimeout(30000);
-  if (!http.begin(tls, url)) return false;
+  if (!beginRequest(http, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + deviceToken);
   http.addHeader("Content-Type", String("multipart/form-data; boundary=") + BOUNDARY);
   BlinkStream stream(body.data(), body.size());
@@ -210,7 +219,7 @@ bool httpGet(const String& url, String& response, int& code) {
   HTTPClient http;
   http.setTimeout(15000);
   http.setConnectTimeout(30000);
-  if (!http.begin(tls, url)) return false;
+  if (!beginRequest(http, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + deviceToken);
   code = http.GET();
   response = http.getString();
