@@ -29,5 +29,8 @@ describe('场景：Agent 提示词 · 时间与空结果约束', () => {
     expect(prompt).toContain('23:59:00+08:00');
     expect(prompt).toContain('没人说就留空，不要替用户排期');
     expect(prompt).toContain('reply、summary、keyPoints、actions 至少有一个非空');
+    // 负责人不写编号，会议标题不用占位词
+    expect(prompt).toContain('绝不写「说话人 1」这类编号');
+    expect(prompt).toContain('不要用「新会议」这类占位词');
   });
 });
