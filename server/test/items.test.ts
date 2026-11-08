@@ -352,6 +352,36 @@ describe('场景：事项 · 候选来源与时间清空', () => {
     const list = await call(ctx, { method: 'GET', url: `/api/items?threadId=${threadId}`, token });
     expect(list.body.items).toHaveLength(1);
     expect(list.body.items[0].sourceMessageId).toBe(assistantId);
+
+    const outOfRange = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'todo',
+        title: '准备周报',
+        sourceMessageId: assistantId,
+        candidateIndex: 99,
+      },
+    });
+    expect(outOfRange.status).toBe(400);
+    expect(outOfRange.body.code).toBe('INVALID_INPUT');
+
+    const titleMismatch = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'todo',
+        title: '另一条',
+        sourceMessageId: assistantId,
+        candidateIndex: 0,
+      },
+    });
+    expect(titleMismatch.status).toBe(400);
+    expect(titleMismatch.body.code).toBe('INVALID_INPUT');
   });
 
   it('来源消息必须属于当前 thread 且是助手消息', async () => {
@@ -374,15 +404,15 @@ describe('场景：事项 · 候选来源与时间清空', () => {
     expect(response.body.code).toBe('INVALID_INPUT');
   });
 
-  it('PATCH dueAt=null 可以清空提醒时间', async () => {
+  it('PATCH dueAt=null 可以清空待办时间，但拒绝清空提醒时间', async () => {
     const created = await call(ctx, {
       method: 'POST',
       url: '/api/items',
       token,
       payload: {
         threadId,
-        kind: 'reminder',
-        title: '去游泳',
+        kind: 'todo',
+        title: '买牛奶',
         dueAt: '2026-11-09T09:00:00+08:00',
       },
     });
@@ -397,5 +427,28 @@ describe('场景：事项 · 候选来源与时间清空', () => {
     });
     expect(cleared.status).toBe(200);
     expect(cleared.body.dueAt).toBeUndefined();
+    const stored = await call(ctx, { method: 'GET', url: `/api/items?threadId=${threadId}`, token });
+    const storedItem = stored.body.items.find((item: { id: string }) => item.id === created.body.id);
+    expect(storedItem.dueAt).toBeUndefined();
+
+    const reminder = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'reminder',
+        title: '去游泳',
+        dueAt: '2026-11-09T09:00:00+08:00',
+      },
+    });
+    const rejected = await call(ctx, {
+      method: 'PATCH',
+      url: `/api/items/${reminder.body.id}`,
+      token,
+      payload: { dueAt: null },
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.code).toBe('INVALID_INPUT');
   });
 });

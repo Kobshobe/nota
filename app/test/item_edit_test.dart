@@ -13,8 +13,8 @@ void main() {
     final item = Item(
       id: 'item-1',
       threadId: 'thread-1',
-      kind: ItemKind.reminder,
-      title: '去游泳',
+      kind: ItemKind.todo,
+      title: '买牛奶',
       dueAt: now.add(const Duration(hours: 2)),
       status: ItemStatus.open,
       createdAt: now,

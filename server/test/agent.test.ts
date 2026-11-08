@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { messages as messagesTable, toolCalls as toolCallsTable } from '../src/db/schema';
+import { messages as messagesTable, toolCalls as toolCallsTable, type MessageRow } from '../src/db/schema';
+import { formatAssistantHistory } from '../src/agent/run';
 import {
   assistantWithTools,
   call,
@@ -710,5 +711,54 @@ describe('场景：Agent · 持久化失败整体回滚', () => {
       token: auth.token,
     });
     expect(thread.body.messages).toHaveLength(0);
+  });
+});
+
+
+describe('场景：Agent · 历史消息保留纪要上下文', () => {
+  it('assistant 历史会把摘要、重点和候选事项带回模型', () => {
+    const row: MessageRow = {
+      id: 'assistant-history',
+      threadId: 'thread-history',
+      role: 'assistant',
+      content: '已整理会议',
+      payloadJson: JSON.stringify({
+        title: '产品周会',
+        summary: '确认报价分工。',
+        keyPoints: ['小李交报价'],
+        actions: [
+          { title: '提交报价', owner: '小李', dueAt: '2026-11-13T18:00:00+08:00' },
+        ],
+        reply: '已整理',
+      }),
+      clientMessageId: null,
+      userMessageId: 'user-history',
+      responseJson: null,
+      createdAt: '2026-11-08T02:00:00.000Z',
+    };
+    const history = formatAssistantHistory(row);
+    expect(history).toContain('摘要：确认报价分工。');
+    expect(history).toContain('0. 提交报价');
+    expect(history).toContain('负责人=小李');
+  });
+
+  it('长摘要不会把候选事项截掉', () => {
+    const row: MessageRow = {
+      id: 'assistant-long-summary',
+      threadId: 'thread-history',
+      role: 'assistant',
+      content: '已整理会议',
+      payloadJson: JSON.stringify({
+        summary: '长'.repeat(5000),
+        actions: [{ title: '提交报价' }],
+      }),
+      clientMessageId: null,
+      userMessageId: 'user-history',
+      responseJson: null,
+      createdAt: '2026-11-08T02:00:00.000Z',
+    };
+    const history = formatAssistantHistory(row);
+    expect(history).toContain('0. 提交报价');
+    expect(history.length).toBeLessThanOrEqual(4000);
   });
 });

@@ -34,15 +34,25 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   const port = parseInteger(env.PORT, 8080, 'PORT');
   const dailyLimit = parseInteger(env.DAILY_LIMIT, 10, 'DAILY_LIMIT');
   const databasePath = path.resolve(root, env.DATABASE_PATH?.trim() || './data/nota.db');
+  const jwtExpiresIn = env.JWT_EXPIRES_IN?.trim() || '7d';
+  if (!/^\d+(ms|s|m|h|d)$/.test(jwtExpiresIn)) {
+    throw new Error('JWT_EXPIRES_IN must look like 7d, 12h, or 30m.');
+  }
+  const quotaTimezone = env.QUOTA_TIMEZONE?.trim() || 'Asia/Shanghai';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: quotaTimezone }).format();
+  } catch {
+    throw new Error(`QUOTA_TIMEZONE is not a valid IANA time zone: ${quotaTimezone}`);
+  }
 
   return {
     repoRoot: root,
     port,
     databasePath,
     jwtSecret,
-    jwtExpiresIn: env.JWT_EXPIRES_IN?.trim() || '7d',
+    jwtExpiresIn,
     dailyLimit,
-    quotaTimezone: env.QUOTA_TIMEZONE?.trim() || 'Asia/Shanghai',
+    quotaTimezone,
     deepseekApiKey: env.DEEPSEEK_API_KEY?.trim() || undefined,
     deepseekBaseUrl: env.DEEPSEEK_BASE_URL?.trim() || 'https://api.deepseek.com',
     deepseekModel: env.DEEPSEEK_MODEL?.trim() || 'deepseek-flash',

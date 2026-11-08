@@ -23,10 +23,18 @@ fi
 START_LOG="${TMPDIR:-/tmp}/nota-e2e-server.log"
 SERVER_PID=""
 
+kill_tree() {
+  local pid="$1"
+  for child in $(pgrep -P "$pid" 2>/dev/null || true); do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null || true
+}
+
 if ! curl -sf "${BASE}/api/health" >/dev/null 2>&1; then
   sh -c "$START_CMD" >"$START_LOG" 2>&1 &
   SERVER_PID=$!
-  trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+  trap 'if [ -n "${SERVER_PID:-}" ]; then kill_tree "$SERVER_PID"; fi' EXIT
 fi
 
 for _ in $(seq 1 50); do

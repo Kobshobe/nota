@@ -11,7 +11,7 @@ import {
   type ThreadRow,
 } from './db/schema';
 import type { MessagePayload, ToolName, ToolTrace } from './domain';
-import { internal } from './lib/errors';
+import { internal, invalidInput } from './lib/errors';
 import { toItemDto, toMessageDto, type ItemDto, type MessageDto } from './lib/dto';
 import { dayInTimeZone } from './lib/time';
 import { DEFAULT_MEETING_TITLE, getOwnedThread } from './threads';
@@ -72,8 +72,21 @@ export function registerMessageRoutes(app: FastifyInstance): void {
       let userMessage: MessageRow;
       let chargedDay: string | undefined;
       if (existingUserMessage) {
+        if (existingUserMessage.content !== body.content) {
+          throw invalidInput('clientMessageId was reused with different content');
+        }
         userMessage = existingUserMessage;
-        chargedDay = dayInTimeZone(new Date(existingUserMessage.createdAt), app.config.quotaTimezone);
+        const originalDay = dayInTimeZone(
+          new Date(existingUserMessage.createdAt),
+          app.config.quotaTimezone,
+        );
+        const currentDay = dayInTimeZone(now, app.config.quotaTimezone);
+        if (originalDay !== currentDay) {
+          refundQuota(app.db, user.id, originalDay, now);
+          chargedDay = chargeQuota(app.db, user, app.config, now).day;
+        } else {
+          chargedDay = originalDay;
+        }
       } else {
         const charge = chargeQuota(app.db, user, app.config, now);
         chargedDay = charge.day;

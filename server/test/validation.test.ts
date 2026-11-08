@@ -125,7 +125,7 @@ describe('场景：CORS · Flutter Web', () => {
     await ctx.close();
   });
 
-  it('预检请求允许 Authorization 与 X-Request-Id', async () => {
+  it('预检请求允许 Authorization 与 Content-Type，并暴露 X-Request-Id', async () => {
     // when：浏览器预检
     const response = await ctx.app.inject({
       method: 'OPTIONS',
@@ -141,6 +141,7 @@ describe('场景：CORS · Flutter Web', () => {
     expect(response.statusCode).toBe(204);
     expect(response.headers['access-control-allow-origin']).toBe('http://localhost:5173');
     expect(String(response.headers['access-control-allow-headers']).toLowerCase()).toContain('authorization');
+    expect(String(response.headers['access-control-allow-headers']).toLowerCase()).toContain('content-type');
     expect(String(response.headers['access-control-expose-headers']).toLowerCase()).toContain('x-request-id');
   });
 

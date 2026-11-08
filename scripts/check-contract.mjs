@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 运行时契约一致性：起服务，按真实用户路径打请求，逐条核对状态码、字段和错误码。
-// 这是第三层防线：单测各自绿，不能证明两端对得上。
+// 覆盖认证、threads、items、usage；消息/工具轨迹/候选来源/429 由 server/test/contract-message.test.ts 覆盖。
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -22,15 +22,24 @@ async function isHealthy() {
 }
 
 let child = null;
+
+function stopChild() {
+  if (!child?.pid) return;
+  try {
+    process.kill(-child.pid, 'SIGTERM');
+  } catch {
+    child.kill();
+  }
+}
 if (!(await isHealthy())) {
-  child = spawn('sh', ['-c', startCommand], { cwd: root, stdio: 'ignore' });
+  child = spawn('sh', ['-c', startCommand], { cwd: root, stdio: 'ignore', detached: true });
   for (let attempt = 0; attempt < 80; attempt += 1) {
     if (await isHealthy()) break;
     await sleep(150);
   }
   if (!(await isHealthy())) {
     console.error(`服务没有在 ${base} 上起来。检查 START_CMD（当前：${startCommand}）。`);
-    child?.kill();
+    stopChild();
     process.exit(1);
   }
   console.log(`（未发现运行中的服务，已临时启动：${base}）`);
@@ -96,6 +105,19 @@ async function main() {
   const stamp = Date.now();
   const email = `contract-${stamp}@example.com`;
   const password = 'nota-contract-123';
+
+  check('契约可解析', Boolean(contract?.openapi), contract?.openapi ?? '读不到 openapi 字段');
+  check(
+    'Message 契约含 toolCalls',
+    Boolean(contract?.components?.schemas?.Message?.properties?.toolCalls),
+  );
+  check(
+    'Item 契约含候选来源字段',
+    Boolean(
+      contract?.components?.schemas?.Item?.properties?.sourceMessageId &&
+        contract?.components?.schemas?.Item?.properties?.candidateIndex,
+    ),
+  );
 
   const health = await send({ method: 'GET', path: '/api/health' });
   expectSuccess('健康检查', health, { status: 200, keys: ['ok'] });
@@ -167,6 +189,40 @@ async function main() {
   check('删除事项：状态码 204', deleted.response.status === 204, `实际 ${deleted.response.status}`);
   check('删除事项：空响应', deleted.text === '');
 
+  const timedTodo = await send({
+    method: 'POST',
+    path: '/api/items',
+    auth: true,
+    body: {
+      threadId,
+      kind: 'todo',
+      title: '契约检查待办',
+      dueAt: '2026-11-09T09:00:00+08:00',
+    },
+  });
+  expectSuccess('带时间的按钮直建待办', timedTodo, {
+    status: 201,
+    keys: ['dueAt', 'id', 'threadId', 'kind', 'title', 'status', 'createdAt', 'updatedAt'],
+  });
+  const cleared = await send({
+    method: 'PATCH',
+    path: `/api/items/${timedTodo.json.id}`,
+    auth: true,
+    body: { dueAt: null },
+  });
+  expectSuccess('清空待办时间', cleared, {
+    status: 200,
+    keys: ['id', 'threadId', 'kind', 'title', 'status', 'createdAt', 'updatedAt'],
+  });
+  check('清空待办时间：dueAt 已移除', !('dueAt' in (cleared.json ?? {})));
+  const stored = await send({
+    method: 'GET',
+    path: `/api/items?threadId=${threadId}`,
+    auth: true,
+  });
+  const storedItem = stored.json?.items?.find((item) => item.id === timedTodo.json.id);
+  check('清空待办时间：已持久化', storedItem && !('dueAt' in storedItem));
+
   const reminder = await send({
     method: 'POST',
     path: '/api/items',
@@ -182,17 +238,14 @@ async function main() {
     status: 201,
     keys: ['dueAt', 'id', 'threadId', 'kind', 'title', 'status', 'createdAt', 'updatedAt'],
   });
-  const cleared = await send({
+  const rejectedClear = await send({
     method: 'PATCH',
     path: `/api/items/${reminder.json.id}`,
     auth: true,
     body: { dueAt: null },
   });
-  expectSuccess('清空提醒时间', cleared, {
-    status: 200,
-    keys: ['id', 'threadId', 'kind', 'title', 'status', 'createdAt', 'updatedAt'],
-  });
-  check('清空提醒时间：dueAt 已移除', !('dueAt' in (cleared.json ?? {})));
+  expectError('提醒不能清空时间', rejectedClear, { status: 400, code: 'INVALID_INPUT' });
+  await send({ method: 'DELETE', path: `/api/items/${timedTodo.json.id}`, auth: true });
   await send({ method: 'DELETE', path: `/api/items/${reminder.json.id}`, auth: true });
 
   const usage = await send({ method: 'GET', path: '/api/usage', auth: true });
@@ -242,5 +295,5 @@ try {
   }
   console.log(`\n共 ${results.length} 项，失败 ${failed} 项。`);
   if (failed > 0) process.exitCode = 1;
-  child?.kill();
+  stopChild();
 }

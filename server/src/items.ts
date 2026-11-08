@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { requireUser } from './auth';
 import { threads, items, messages, type ItemRow } from './db/schema';
 import { invalidInput, notFound } from './lib/errors';
-import { toItemDto } from './lib/dto';
+import { parsePayload, toItemDto } from './lib/dto';
 import { getOwnedThread } from './threads';
 
 const dateTime = z.string().datetime({ offset: true, message: 'Must be an ISO 8601 date-time' });
@@ -86,6 +86,18 @@ export function registerItemRoutes(app: FastifyInstance): void {
       if (!source) {
         throw invalidInput('sourceMessageId must be an assistant message in this thread');
       }
+      const actions = parsePayload(source.payloadJson)?.actions ?? [];
+      const candidate = actions[body.candidateIndex];
+      if (!candidate) {
+        throw invalidInput('candidateIndex does not point to a candidate action', {
+          candidateIndex: body.candidateIndex,
+        });
+      }
+      if (candidate.title.trim() !== body.title.trim()) {
+        throw invalidInput('title does not match the candidate action', {
+          expectedTitle: candidate.title,
+        });
+      }
     }
     const now = app.now();
     const timestamp = now.toISOString();
@@ -124,6 +136,9 @@ export function registerItemRoutes(app: FastifyInstance): void {
     const { itemId } = request.params as { itemId: string };
     const body = updateItemSchema.parse(request.body);
     const row = findMutableItem(app, user.id, itemId);
+    if (body.dueAt === null && row.kind === 'reminder') {
+      throw invalidInput('A reminder requires dueAt', { dueAt: 'Cannot clear a reminder time' });
+    }
     const timestamp = app.now().toISOString();
     const patch: Partial<ItemRow> = { updatedAt: timestamp };
     if (body.title !== undefined) patch.title = body.title;

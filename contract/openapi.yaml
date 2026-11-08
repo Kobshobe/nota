@@ -190,6 +190,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ItemsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
     post:
@@ -584,6 +586,17 @@ components:
         candidateIndex:
           type: integer
           minimum: 0
+      allOf:
+        - if:
+            properties:
+              kind:
+                const: reminder
+            required: [kind]
+          then:
+            required: [dueAt]
+        - dependentRequired:
+            sourceMessageId: [candidateIndex]
+            candidateIndex: [sourceMessageId]
     UpdateItemRequest:
       type: object
       additionalProperties: false

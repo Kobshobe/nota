@@ -1,4 +1,7 @@
+import { createHmac } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { users } from '../src/db/schema';
 import { call, createTestApp, login, type TestContext } from './helpers';
 
 describe('场景：登录 · 新邮箱自动注册', () => {
@@ -107,6 +110,27 @@ describe('场景：JWT · 鉴权', () => {
 
   afterEach(async () => {
     await ctx.close();
+  });
+
+  it('过期 token 返回 401 UNAUTHORIZED', async () => {
+    // given：已注册用户和一个已过期的 JWT
+    await login(ctx, 'expired@example.com');
+    const user = ctx.app.db.select().from(users).where(eq(users.email, 'expired@example.com')).get()!;
+    const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+    const now = Math.floor(Date.now() / 1000);
+    const header = encode({ alg: 'HS256', typ: 'JWT' });
+    const payload = encode({ sub: user.id, email: user.email, iat: now - 100, exp: now - 10 });
+    const signature = createHmac('sha256', ctx.config.jwtSecret)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
+    const token = `${header}.${payload}.${signature}`;
+
+    // when
+    const response = await call(ctx, { method: 'GET', url: '/api/auth/me', token });
+
+    // then
+    expect(response.status).toBe(401);
+    expect(response.body.code).toBe('UNAUTHORIZED');
   });
 
   it('缺少或伪造 token 返回 401 UNAUTHORIZED', async () => {

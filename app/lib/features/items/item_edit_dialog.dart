@@ -138,7 +138,11 @@ class _ItemEditDialogState extends State<_ItemEditDialog> {
                       ),
                     ),
                   ),
-                  TextButton(onPressed: _clearTime, child: const Text('清除时间')),
+                  if (widget.item.kind == ItemKind.todo)
+                    TextButton(
+                      onPressed: _clearTime,
+                      child: const Text('清除时间'),
+                    ),
                 ],
               ),
             ],

@@ -96,7 +96,12 @@ class AuthStore extends ChangeNotifier {
 
   Future<void> save(String token, NotaUser user) async {
     await _storage.writeToken(token);
-    await _storage.writeUser(jsonEncode(user.toJson()));
+    try {
+      await _storage.writeUser(jsonEncode(user.toJson()));
+    } catch (_) {
+      await _storage.clear();
+      rethrow;
+    }
     _token = token;
     _user = user;
     notifyListeners();
@@ -104,11 +109,15 @@ class AuthStore extends ChangeNotifier {
 
   Future<void> clear() async {
     if (_token == null && _user == null) return;
+    await _storage.clear();
     _token = null;
     _user = null;
     notifyListeners();
-    await _storage.clear();
-    await onSessionCleared?.call();
+    try {
+      await onSessionCleared?.call();
+    } catch (error) {
+      debugPrint('clear notifications failed: $error');
+    }
   }
 }
 

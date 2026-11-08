@@ -66,11 +66,17 @@ describe('场景：配置 · JWT_SECRET 必填', () => {
     expect(overridden.port).toBe(7070);
   });
 
-  it('非法端口或每日额度抛错', () => {
+  it('非法端口、每日额度、时区或 JWT 有效期抛错', () => {
     const dir = tempDir();
     expect(() => loadConfig({ root: dir, env: { JWT_SECRET: 'x', PORT: 'abc' } })).toThrow(/PORT/);
     expect(() => loadConfig({ root: dir, env: { JWT_SECRET: 'x', DAILY_LIMIT: '0' } })).toThrow(
       /DAILY_LIMIT/,
     );
+    expect(() =>
+      loadConfig({ root: dir, env: { JWT_SECRET: 'x', QUOTA_TIMEZONE: 'Not/AZone' } }),
+    ).toThrow(/QUOTA_TIMEZONE/);
+    expect(() =>
+      loadConfig({ root: dir, env: { JWT_SECRET: 'x', JWT_EXPIRES_IN: 'forever' } }),
+    ).toThrow(/JWT_EXPIRES_IN/);
   });
 });

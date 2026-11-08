@@ -45,6 +45,7 @@ class ApiException implements Exception {
     this.requestId,
     this.retryable = false,
     this.retryAfter,
+    this.quotaResetAt,
     this.displayMessage,
   });
 
@@ -54,6 +55,7 @@ class ApiException implements Exception {
   final String? requestId;
   final bool retryable;
   final Duration? retryAfter;
+  final DateTime? quotaResetAt;
 
   /// 客户端本地错误可以给出比 code 默认文案更具体的说明。
   final String? displayMessage;
@@ -73,9 +75,10 @@ class ApiException implements Exception {
       };
 
   String get _quotaMessage {
-    final after = retryAfter;
-    if (after == null) return '今日额度已用完';
-    final resetAt = DateTime.now().add(after);
+    final resetAt =
+        quotaResetAt ??
+        (retryAfter == null ? null : DateTime.now().add(retryAfter!));
+    if (resetAt == null) return '今日额度已用完';
     return '今日额度已用完，将于 ${DateFormat('HH:mm').format(resetAt)} 重置';
   }
 
@@ -123,6 +126,7 @@ class ErrorInterceptor extends Interceptor {
 
     if (data is Map) {
       final code = ApiErrorCode.fromWire(data['code']?.toString());
+      final retryAfter = _retryAfter(response);
       return ApiException(
         code: code,
         message: data['message']?.toString() ?? error.message ?? '',
@@ -130,7 +134,10 @@ class ErrorInterceptor extends Interceptor {
         requestId: requestId,
         retryable:
             code == ApiErrorCode.internal || (status != null && status >= 500),
-        retryAfter: _retryAfter(response),
+        retryAfter: retryAfter,
+        quotaResetAt: retryAfter == null
+            ? null
+            : DateTime.now().add(retryAfter),
       );
     }
 
@@ -143,12 +150,16 @@ class ErrorInterceptor extends Interceptor {
       );
     }
     if (status == 429) {
+      final retryAfter = _retryAfter(response);
       return ApiException(
         code: ApiErrorCode.quotaExceeded,
         message: error.message ?? 'Quota exceeded',
         statusCode: status,
         requestId: requestId,
-        retryAfter: _retryAfter(response),
+        retryAfter: retryAfter,
+        quotaResetAt: retryAfter == null
+            ? null
+            : DateTime.now().add(retryAfter),
       );
     }
     if (status != null && status >= 500) {

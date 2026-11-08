@@ -143,7 +143,11 @@ class ChatController extends AsyncNotifier<ChatState> {
             ..add(result.assistantMessage);
       var thread = latest.thread;
       final payloadTitle = result.assistantMessage.payload?.title?.trim();
-      if (thread.kind == ThreadKind.meeting &&
+      final hadAssistant = latest.messages.any(
+        (message) => message.role == MessageRole.assistant,
+      );
+      if (!hadAssistant &&
+          thread.kind == ThreadKind.meeting &&
           (thread.title.trim().isEmpty || thread.title == '新会议') &&
           payloadTitle != null &&
           payloadTitle.isNotEmpty) {

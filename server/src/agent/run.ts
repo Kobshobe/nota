@@ -5,7 +5,7 @@ import type { AssistantMessage, Usage } from '@earendil-works/pi-ai';
 import type { Db } from '../db';
 import { items, messages, type MessageRow, type ThreadRow } from '../db/schema';
 import type { MessagePayload, ToolName, ToolTrace } from '../domain';
-import { isRecord } from '../lib/dto';
+import { isRecord, parsePayload } from '../lib/dto';
 import type { AgentRuntime } from './runtime';
 import { buildSystemPrompt } from './prompt';
 import { createAgentTools } from './tools';
@@ -133,7 +133,7 @@ function toAgentMessage(row: MessageRow, runtime: AgentRuntime): AgentMessage {
   }
   const assistant: AssistantMessage = {
     role: 'assistant',
-    content: [{ type: 'text', text: row.content || '已处理' }],
+    content: [{ type: 'text', text: formatAssistantHistory(row) }],
     api: runtime.model.api,
     provider: runtime.model.provider,
     model: runtime.model.id,
@@ -142,6 +142,39 @@ function toAgentMessage(row: MessageRow, runtime: AgentRuntime): AgentMessage {
     timestamp,
   };
   return assistant;
+}
+
+export function formatAssistantHistory(row: MessageRow): string {
+  const payload = parsePayload(row.payloadJson);
+  if (!payload) return row.content || '已处理';
+  const lines: string[] = [];
+  if (payload.title) lines.push(`标题：${payload.title}`);
+
+  // 候选事项优先保留，避免长摘要把 "第 2 条" 的指代上下文截掉。
+  if (payload.actions?.length) {
+    lines.push('候选事项（从 0 开始编号）：');
+    lines.push(
+      ...payload.actions.map((action, index) => {
+        const meta = [
+          action.owner ? `负责人=${action.owner}` : '',
+          action.dueAt ? `dueAt=${action.dueAt}` : '',
+          action.evidence ? `依据=${action.evidence.slice(0, 160)}` : '',
+        ]
+          .filter(Boolean)
+          .join('；');
+        return `${index}. ${action.title}${meta ? `（${meta}）` : ''}`;
+      }),
+    );
+  }
+
+  if (payload.reply) lines.push(`回复：${payload.reply.slice(0, 600)}`);
+  if (payload.keyPoints?.length) {
+    lines.push('重点：');
+    lines.push(...payload.keyPoints.map((point) => `- ${point.slice(0, 300)}`));
+  }
+  if (payload.summary) lines.push(`摘要：${payload.summary.slice(0, 1600)}`);
+
+  return (lines.join('\n') || row.content || '已处理').slice(0, 4000);
 }
 
 function asObject(value: unknown): Record<string, unknown> {

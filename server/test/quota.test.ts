@@ -193,6 +193,28 @@ describe('场景：额度 · 重试不重复扣', () => {
     expect(detail.body.messages).toHaveLength(2);
   });
 
+  it('额度只剩 1 次时并发不同消息只有一条成功', async () => {
+    // given：已经用了 9 次
+    ctx.faux.setResponses(
+      Array.from({ length: 11 }, () => finishOnly({ reply: '好的' })),
+    );
+    for (let index = 0; index < 9; index += 1) {
+      const seeded = await sendMessage(ctx, token, `预热 ${index}`);
+      expect(seeded.status).toBe(200);
+    }
+
+    // when：两条不同消息同时到达
+    const [first, second] = await Promise.all([
+      sendMessage(ctx, token, '并发 A', { clientMessageId: 'quota-race-a' }),
+      sendMessage(ctx, token, '并发 B', { clientMessageId: 'quota-race-b' }),
+    ]);
+
+    // then：只成功一条，额度落在 10
+    expect([first.status, second.status].sort()).toEqual([200, 429]);
+    const usage = await call(ctx, { method: 'GET', url: '/api/usage', token });
+    expect(usage.body.used).toBe(10);
+  });
+
   it('并发提交同一 clientMessageId 只调用一次模型并只扣一次额度', async () => {
     // given：同一个 key 的两个请求同时到达
     const threadId = await dailyThreadId(ctx, token);

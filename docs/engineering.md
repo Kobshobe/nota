@@ -16,8 +16,8 @@ Demo 版工程规范：结构清楚、代码少、测试场景一眼看懂。产
 - 响应带 `X-Request-Id`；错误体带 `requestId`。
 - 单次文字输入上限 20,000 字符；超限返回 400 `INVALID_INPUT`。
 - 写消息带 `clientMessageId`；同键重试返回原结果，不重复创建或扣额度。
-- 按钮确认候选事项带 `sourceMessageId` 与 `candidateIndex`；`GET /threads/{id}` 的 `Message.toolCalls` 回放工具轨迹。
-- `PATCH /items/{id}` 的 `dueAt: null` 表示清空时间；省略表示不变。
+- 按钮确认候选事项带 `sourceMessageId` 与 `candidateIndex`，两者必须成对；`GET /threads/{id}` 的 `Message.toolCalls` 回放工具轨迹。
+- 创建 `reminder` 必须带 `dueAt`；`PATCH /items/{id}` 的 `dueAt: null` 只能清空待办时间，提醒不能清空，省略表示不变。
 - 列表用 `limit` 控制数量，不做游标分页。
 
 ## 3. 错误规范
@@ -130,8 +130,13 @@ server/src/
 server/test/
   auth.test.ts
   quota.test.ts
-  meeting.test.ts
+  threads.test.ts
+  items.test.ts
   agent.test.ts
+  validation.test.ts
+  config.test.ts
+  prompt.test.ts
+  contract-message.test.ts
 ```
 
 - 一个 feature 一个文件，路由、业务、查询就近；不建 `repositories/`、`services/` 分层。

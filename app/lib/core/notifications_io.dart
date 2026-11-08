@@ -66,12 +66,16 @@ class AppNotificationService {
   }
 
   Future<void> cancel(String itemId) async {
-    await init();
+    final initialized = _initialized;
+    if (initialized == null) return;
+    await initialized;
     await _plugin.cancel(id: _notificationId(itemId));
   }
 
   Future<void> cancelAll() async {
-    await init();
+    final initialized = _initialized;
+    if (initialized == null) return;
+    await initialized;
     await _plugin.cancelAll();
   }
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, like } from 'drizzle-orm';
+import { and, desc, eq, like, ne } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../db';
 import { items, type ItemRow } from '../db/schema';
@@ -197,20 +197,26 @@ export class Staging {
           const patch: Partial<ItemRow> = { updatedAt: timestamp };
           if (operation.title !== undefined) patch.title = operation.title;
           if (operation.dueAt !== undefined) patch.dueAt = operation.dueAt;
-          tx.update(items)
+          const outcome = tx
+            .update(items)
             .set(patch)
-            .where(and(eq(items.id, id), eq(items.userId, this.userId)))
+            .where(and(eq(items.id, id), eq(items.userId, this.userId), ne(items.status, 'deleted')))
             .run();
+          if (outcome.changes === 0) throw new Error(`Item was deleted during the run: ${id}`);
         } else if (operation.type === 'delete') {
-          tx.update(items)
+          const outcome = tx
+            .update(items)
             .set({ status: 'deleted', updatedAt: timestamp })
-            .where(and(eq(items.id, id), eq(items.userId, this.userId)))
+            .where(and(eq(items.id, id), eq(items.userId, this.userId), ne(items.status, 'deleted')))
             .run();
+          if (outcome.changes === 0) throw new Error(`Item was already deleted: ${id}`);
         } else {
-          tx.update(items)
+          const outcome = tx
+            .update(items)
             .set({ status: 'done', updatedAt: timestamp })
-            .where(and(eq(items.id, id), eq(items.userId, this.userId)))
+            .where(and(eq(items.id, id), eq(items.userId, this.userId), ne(items.status, 'deleted')))
             .run();
+          if (outcome.changes === 0) throw new Error(`Item was deleted during the run: ${id}`);
         }
         touched.push(id);
       }
