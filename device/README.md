@@ -57,6 +57,8 @@ https://<随机>.trycloudflare.com dev_xxxxxxxx
 
 回车。看到 `ready: hold GPIO4 to talk` 后，按住电路里的绿色按钮，松开。
 
+模拟器里也可以在串口输入 `s` 触发一次发送；Wokwi 的部件交互不稳定时用它，真机没有这个入口。
+
 ## 预期输出
 
 ```text

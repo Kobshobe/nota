@@ -137,7 +137,7 @@ bool readConfig() {
   }
 }
 
-bool httpPost(const String& url, const std::vector<uint8_t>& body, String& response, int& code) {
+bool httpPost(const String& url, std::vector<uint8_t>& body, String& response, int& code) {
   HTTPClient http;
   http.setTimeout(20000);
   if (!http.begin(tls, url)) return false;
@@ -162,18 +162,20 @@ bool httpGet(const String& url, String& response, int& code) {
 
 bool downloadReplyAudio(const String& url, size_t& bytes) {
   HTTPClient http;
-  http.setTimeout(20000);
+  http.setTimeout(60000);
   if (!http.begin(tls, url)) return false;
   http.addHeader("Authorization", String("Bearer ") + deviceToken);
   int code = http.GET();
   if (code != 200) {
+    Serial.print("reply audio: HTTP ");
+    Serial.println(code);
     http.end();
     return false;
   }
   int expected = http.getSize();
   WiFiClient* stream = http.getStreamPtr();
   bytes = 0;
-  const unsigned long deadline = millis() + 10000UL;
+  const unsigned long deadline = millis() + 60000UL;
   while (millis() < deadline) {
     int available = stream->available();
     if (available > 0) {
@@ -181,15 +183,24 @@ bool downloadReplyAudio(const String& url, size_t& bytes) {
         stream->read();
         bytes += 1;
       }
-      if (expected >= 0 && bytes >= (size_t)expected) break;
-      continue;
     }
     if (expected >= 0 && bytes >= (size_t)expected) break;
-    if (!http.connected()) break;
+    if (expected < 0 && !http.connected() && stream->available() == 0) break;
     delay(10);
   }
   http.end();
-  return expected < 0 ? bytes > 0 : bytes >= (size_t)expected;
+  if (expected >= 0 && bytes < (size_t)expected) {
+    Serial.print("reply audio: short read ");
+    Serial.print(bytes);
+    Serial.print("/");
+    Serial.println(expected);
+    return false;
+  }
+  if (bytes == 0) {
+    Serial.println("reply audio: empty body");
+    return false;
+  }
+  return true;
 }
 
 bool sendUtterance() {
@@ -314,6 +325,20 @@ void loop() {
     delay(2000);
     return;
   }
+  if (Serial.available()) {
+    char command = (char)Serial.read();
+    if (command == 's' || command == 'S') {
+      // 模拟器快捷方式：没有按键交互时也能触发一次发送；真机没有这个入口。
+      Serial.println("serial trigger: sending...");
+      digitalWrite(LED_PIN, HIGH);
+      bool ok = sendUtterance();
+      ledOff();
+      if (!ok) failBlink();
+      delay(300);
+      return;
+    }
+  }
+
   if (digitalRead(BUTTON_PIN) == HIGH) {
     delay(20);
     return;
