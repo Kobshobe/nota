@@ -226,6 +226,7 @@ class ChatController extends AsyncNotifier<ChatState> {
             kind: kind,
             title: action.title,
             dueAt: action.dueAt,
+            scheduledAt: action.scheduledAt,
             sourceMessageId: message.id,
             candidateIndex: index,
           );

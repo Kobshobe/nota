@@ -55,6 +55,40 @@ describe('场景：事项 · 直接创建与校验', () => {
     expect(usage.body.used).toBe(0);
   });
 
+  it('待办可以同时有截止时间和执行时间，执行时间能单独清除', async () => {
+    // when
+    const created = await call(ctx, {
+      method: 'POST',
+      url: '/api/items',
+      token,
+      payload: {
+        threadId,
+        kind: 'todo',
+        title: '给张总报价单',
+        dueAt: '2026-11-11T23:59:00+08:00',
+        scheduledAt: '2026-11-10T09:30:00+08:00',
+      },
+    });
+
+    // then：两个时间都按 UTC 存
+    expect(created.status).toBe(201);
+    expect(created.body.dueAt).toBe('2026-11-11T15:59:00.000Z');
+    expect(created.body.scheduledAt).toBe('2026-11-10T01:30:00.000Z');
+
+    // when：只清执行时间
+    const cleared = await call(ctx, {
+      method: 'PATCH',
+      url: `/api/items/${created.body.id}`,
+      token,
+      payload: { scheduledAt: null },
+    });
+
+    // then：截止时间还在
+    expect(cleared.status).toBe(200);
+    expect(cleared.body.scheduledAt).toBeUndefined();
+    expect(cleared.body.dueAt).toBe('2026-11-11T15:59:00.000Z');
+  });
+
   it('reminder 必须有 dueAt，dueAt 统一存 UTC', async () => {
     // when：缺少 dueAt
     const missing = await call(ctx, {

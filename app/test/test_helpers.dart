@@ -78,6 +78,7 @@ class FakeApi implements NotaApi {
       ItemKind kind,
       String title,
       DateTime? dueAt,
+      DateTime? scheduledAt,
       String? sourceMessageId,
       int? candidateIndex,
     })
@@ -257,6 +258,7 @@ class FakeApi implements NotaApi {
     required ItemKind kind,
     required String title,
     DateTime? dueAt,
+    DateTime? scheduledAt,
     String? sourceMessageId,
     int? candidateIndex,
   }) async {
@@ -265,6 +267,7 @@ class FakeApi implements NotaApi {
       kind: kind,
       title: title,
       dueAt: dueAt,
+      scheduledAt: scheduledAt,
       sourceMessageId: sourceMessageId,
       candidateIndex: candidateIndex,
     ));
@@ -275,6 +278,7 @@ class FakeApi implements NotaApi {
       kind: kind,
       title: title,
       dueAt: dueAt,
+      scheduledAt: scheduledAt,
       sourceMessageId: sourceMessageId,
       candidateIndex: candidateIndex,
       status: ItemStatus.open,
@@ -291,6 +295,8 @@ class FakeApi implements NotaApi {
     String? title,
     DateTime? dueAt,
     bool clearDueAt = false,
+    DateTime? scheduledAt,
+    bool clearScheduledAt = false,
   }) async {
     final index = items.indexWhere((item) => item.id == itemId);
     final old = items[index];

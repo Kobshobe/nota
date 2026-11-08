@@ -17,6 +17,7 @@ type CreateOp = {
   kind: ItemKind;
   title: string;
   dueAt: string | null;
+  scheduledAt: string | null;
 };
 
 type UpdateOp = {
@@ -24,6 +25,7 @@ type UpdateOp = {
   ref: string;
   title?: string;
   dueAt?: string;
+  scheduledAt?: string;
 };
 
 type DeleteOp = { type: 'delete'; ref: string };
@@ -34,11 +36,13 @@ export interface CreateItemInput {
   title: string;
   kind?: ItemKind;
   dueAt?: string;
+  scheduledAt?: string;
 }
 
 export interface UpdateItemInput {
   title?: string;
   dueAt?: string;
+  scheduledAt?: string;
 }
 
 export interface SearchItemsInput {
@@ -54,6 +58,7 @@ export interface StagedItem {
   kind?: ItemKind;
   title?: string;
   dueAt?: string;
+  scheduledAt?: string;
 }
 
 /**
@@ -97,32 +102,36 @@ export class Staging {
     this.assertOpen();
     const title = requireTitle(input.title);
     const dueAt = input.dueAt ? normalizeDueAt(input.dueAt) : null;
+    const scheduledAt = input.scheduledAt ? normalizeDueAt(input.scheduledAt) : null;
     const kind: ItemKind = input.kind ?? (dueAt ? 'reminder' : 'todo');
     if (kind === 'reminder' && !dueAt) {
       throw new Error('A reminder requires dueAt');
     }
     const tempId = `new_${++this.createCount}`;
-    const operation: CreateOp = { type: 'create', tempId, kind, title, dueAt };
+    const operation: CreateOp = { type: 'create', tempId, kind, title, dueAt, scheduledAt };
     this.operations.push(operation);
     this.created.set(tempId, operation);
     const staged: StagedItem = { itemId: tempId, tempId, kind, title };
     if (dueAt) staged.dueAt = dueAt;
+    if (scheduledAt) staged.scheduledAt = scheduledAt;
     return staged;
   }
 
   update(ref: string, input: UpdateItemInput): StagedItem {
     this.assertOpen();
-    const patch: { title?: string; dueAt?: string } = {};
+    const patch: { title?: string; dueAt?: string; scheduledAt?: string } = {};
     if (input.title !== undefined) patch.title = requireTitle(input.title);
     if (input.dueAt !== undefined) patch.dueAt = normalizeDueAt(input.dueAt);
-    if (patch.title === undefined && patch.dueAt === undefined) {
-      throw new Error('Provide title or dueAt');
+    if (input.scheduledAt !== undefined) patch.scheduledAt = normalizeDueAt(input.scheduledAt);
+    if (patch.title === undefined && patch.dueAt === undefined && patch.scheduledAt === undefined) {
+      throw new Error('Provide title, dueAt or scheduledAt');
     }
 
     const pending = this.created.get(ref);
     if (pending) {
       if (patch.title !== undefined) pending.title = patch.title;
       if (patch.dueAt !== undefined) pending.dueAt = patch.dueAt;
+      if (patch.scheduledAt !== undefined) pending.scheduledAt = patch.scheduledAt;
       return { itemId: pending.tempId, tempId: pending.tempId, ...patch };
     }
 
@@ -183,6 +192,7 @@ export class Staging {
               kind: operation.kind,
               title: operation.title,
               dueAt: operation.dueAt,
+              scheduledAt: operation.scheduledAt,
               status: 'open',
               createdAt: timestamp,
               updatedAt: timestamp,
@@ -197,6 +207,7 @@ export class Staging {
           const patch: Partial<ItemRow> = { updatedAt: timestamp };
           if (operation.title !== undefined) patch.title = operation.title;
           if (operation.dueAt !== undefined) patch.dueAt = operation.dueAt;
+          if (operation.scheduledAt !== undefined) patch.scheduledAt = operation.scheduledAt;
           const outcome = tx
             .update(items)
             .set(patch)

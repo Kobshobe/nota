@@ -182,6 +182,7 @@ class CandidateAction {
     required this.title,
     this.owner,
     this.dueAt,
+    this.scheduledAt,
     this.evidence,
     this.confidence,
   });
@@ -193,6 +194,9 @@ class CandidateAction {
       dueAt: json['dueAt'] == null
           ? null
           : DateTime.parse(json['dueAt'] as String).toUtc(),
+      scheduledAt: json['scheduledAt'] == null
+          ? null
+          : DateTime.parse(json['scheduledAt'] as String).toUtc(),
       evidence: json['evidence'] as String?,
       confidence: (json['confidence'] as num?)?.toDouble(),
     );
@@ -201,6 +205,7 @@ class CandidateAction {
   final String title;
   final String? owner;
   final DateTime? dueAt;
+  final DateTime? scheduledAt;
   final String? evidence;
   final double? confidence;
 
@@ -208,6 +213,7 @@ class CandidateAction {
     'title': title,
     if (owner != null) 'owner': owner,
     if (dueAt != null) 'dueAt': dueAt!.toIso8601String(),
+    if (scheduledAt != null) 'scheduledAt': scheduledAt!.toIso8601String(),
     if (evidence != null) 'evidence': evidence,
     if (confidence != null) 'confidence': confidence,
   };

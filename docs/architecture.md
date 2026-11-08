@@ -31,7 +31,7 @@ Flutter 客户端（Web / iOS）通过 HTTP + JSON 调用 Fastify API；API 内�
 | `users` | id、email、password_hash、created_at |
 | `threads` | id、user_id、kind（daily / meeting）、title、时间 |
 | `messages` | id、thread_id、role、content、payload_json、client_message_id |
-| `items` | id、user_id、thread_id、kind、title、due_at、source_message_id、candidate_index、status |
+| `items` | id、user_id、thread_id、kind、title、due_at、scheduled_at、source_message_id、candidate_index、status |
 | `tool_calls` | id、message_id、name、arguments_json、result_json |
 | `usage_daily` | user_id、day、used |
 | `recordings` | id、user_id、status（transcribing / completed / failed）、audio_path、transcript_json、thread_id |

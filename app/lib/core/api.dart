@@ -277,6 +277,7 @@ abstract class NotaApi {
     required ItemKind kind,
     required String title,
     DateTime? dueAt,
+    DateTime? scheduledAt,
     String? sourceMessageId,
     int? candidateIndex,
   });
@@ -286,6 +287,8 @@ abstract class NotaApi {
     String? title,
     DateTime? dueAt,
     bool clearDueAt = false,
+    DateTime? scheduledAt,
+    bool clearScheduledAt = false,
   });
 
   Future<Item> completeItem(String itemId);
@@ -418,6 +421,7 @@ class ApiClient implements NotaApi {
     required ItemKind kind,
     required String title,
     DateTime? dueAt,
+    DateTime? scheduledAt,
     String? sourceMessageId,
     int? candidateIndex,
   }) {
@@ -428,6 +432,9 @@ class ApiClient implements NotaApi {
     };
     if (dueAt != null) {
       body['dueAt'] = dueAt.toUtc().toIso8601String();
+    }
+    if (scheduledAt != null) {
+      body['scheduledAt'] = scheduledAt.toUtc().toIso8601String();
     }
     if (sourceMessageId != null) body['sourceMessageId'] = sourceMessageId;
     if (candidateIndex != null) body['candidateIndex'] = candidateIndex;
@@ -443,6 +450,8 @@ class ApiClient implements NotaApi {
     String? title,
     DateTime? dueAt,
     bool clearDueAt = false,
+    DateTime? scheduledAt,
+    bool clearScheduledAt = false,
   }) {
     final body = <String, dynamic>{};
     if (title != null) body['title'] = title;
@@ -450,6 +459,11 @@ class ApiClient implements NotaApi {
       body['dueAt'] = null;
     } else if (dueAt != null) {
       body['dueAt'] = dueAt.toUtc().toIso8601String();
+    }
+    if (clearScheduledAt) {
+      body['scheduledAt'] = null;
+    } else if (scheduledAt != null) {
+      body['scheduledAt'] = scheduledAt.toUtc().toIso8601String();
     }
     return _request(
       () => _dio.patch<dynamic>('/api/items/$itemId', data: body),
@@ -460,7 +474,11 @@ class ApiClient implements NotaApi {
   @override
   Future<Item> completeItem(String itemId) {
     return _request(
-      () => _dio.post<dynamic>('/api/items/$itemId/complete'),
+      () => _dio.post<dynamic>(
+        '/api/items/$itemId/complete',
+        // 空 body 配 application/json 会被 Fastify 判成 400。
+        data: const <String, dynamic>{},
+      ),
       (data) => Item.fromJson(data as Map<String, dynamic>),
     );
   }
@@ -468,7 +486,10 @@ class ApiClient implements NotaApi {
   @override
   Future<void> deleteItem(String itemId) {
     return _request<void>(
-      () => _dio.delete<dynamic>('/api/items/$itemId'),
+      () => _dio.delete<dynamic>(
+        '/api/items/$itemId',
+        data: const <String, dynamic>{},
+      ),
       (_) {},
     );
   }

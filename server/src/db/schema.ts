@@ -66,6 +66,7 @@ export const items = sqliteTable(
     kind: text('kind', { enum: ['reminder', 'todo'] }).notNull(),
     title: text('title').notNull(),
     dueAt: text('due_at'),
+    scheduledAt: text('scheduled_at'),
     sourceMessageId: text('source_message_id'),
     candidateIndex: integer('candidate_index'),
     status: text('status', { enum: ['open', 'done', 'deleted'] }).notNull().default('open'),

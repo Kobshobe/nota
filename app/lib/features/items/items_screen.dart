@@ -104,6 +104,8 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
             title: result.title,
             dueAt: result.dueAt,
             clearDueAt: result.clearDueAt,
+            scheduledAt: result.scheduledAt,
+            clearScheduledAt: result.clearScheduledAt,
           );
       if (mounted) AppSnackBar.show(context, '已更新');
     });

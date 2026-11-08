@@ -42,6 +42,8 @@ class ItemsController extends AsyncNotifier<List<Item>> {
     String? title,
     DateTime? dueAt,
     bool clearDueAt = false,
+    DateTime? scheduledAt,
+    bool clearScheduledAt = false,
   }) async {
     final updated = await ref
         .read(apiProvider)
@@ -50,6 +52,8 @@ class ItemsController extends AsyncNotifier<List<Item>> {
           title: title,
           dueAt: dueAt,
           clearDueAt: clearDueAt,
+          scheduledAt: scheduledAt,
+          clearScheduledAt: clearScheduledAt,
         );
     _replace(updated);
     _syncOne(updated);
@@ -92,10 +96,11 @@ class ItemsController extends AsyncNotifier<List<Item>> {
 
   void _syncOne(Item item) {
     final service = ref.read(notificationServiceProvider);
+    final at = item.notificationAt;
     final shouldSchedule =
         item.status == ItemStatus.open &&
-        item.dueAt != null &&
-        item.dueAt!.isAfter(DateTime.now());
+        at != null &&
+        at.isAfter(DateTime.now());
     if (shouldSchedule) {
       unawaited(service.schedule(item));
     } else {

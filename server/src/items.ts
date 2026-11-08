@@ -16,6 +16,7 @@ const createItemSchema = z
     kind: z.enum(['reminder', 'todo']),
     title: z.string().min(1).max(200),
     dueAt: dateTime.optional(),
+    scheduledAt: dateTime.optional(),
     sourceMessageId: z.string().min(1).optional(),
     candidateIndex: z.number().int().min(0).optional(),
   })
@@ -30,11 +31,16 @@ const updateItemSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     dueAt: dateTime.nullable().optional(),
+    scheduledAt: dateTime.nullable().optional(),
   })
   .strict()
-  .refine((value) => value.title !== undefined || value.dueAt !== undefined, {
-    message: 'At least one field is required',
-  });
+  .refine(
+    (value) =>
+      value.title !== undefined ||
+      value.dueAt !== undefined ||
+      value.scheduledAt !== undefined,
+    { message: 'At least one field is required' },
+  );
 
 const listItemsQuerySchema = z.object({
   status: z.enum(['open', 'done']).optional(),
@@ -108,6 +114,7 @@ export function registerItemRoutes(app: FastifyInstance): void {
       kind: body.kind,
       title: body.title,
       dueAt: body.dueAt ? normalizeDueAt(body.dueAt) : null,
+      scheduledAt: body.scheduledAt ? normalizeDueAt(body.scheduledAt) : null,
       sourceMessageId: body.sourceMessageId ?? null,
       candidateIndex: body.candidateIndex ?? null,
       status: 'open',
@@ -144,6 +151,8 @@ export function registerItemRoutes(app: FastifyInstance): void {
     if (body.title !== undefined) patch.title = body.title;
     if (body.dueAt === null) patch.dueAt = null;
     else if (body.dueAt !== undefined) patch.dueAt = normalizeDueAt(body.dueAt);
+    if (body.scheduledAt === null) patch.scheduledAt = null;
+    else if (body.scheduledAt !== undefined) patch.scheduledAt = normalizeDueAt(body.scheduledAt);
     app.db.update(items).set(patch).where(eq(items.id, row.id)).run();
     return toItemDto({ ...row, ...patch });
   });

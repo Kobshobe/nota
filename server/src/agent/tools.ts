@@ -16,7 +16,13 @@ const createItemParameters = obj({
   dueAt: opt(
     str({
       description:
-        'Only when the user explicitly stated a clock time. Omit for date-only phrases like 明天/周五. ISO 8601 with an explicit offset, e.g. 2026-11-08T10:00:00+08:00',
+        'Deadline. For reminders this is the notification time and needs a clock time. For todos a date is enough (use 23:59:00+08:00). ISO 8601 with an explicit offset.',
+    }),
+  ),
+  scheduledAt: opt(
+    str({
+      description:
+        'When the user plans to do it. Only when the user said when they will work on it; needs a clock time. ISO 8601 with an explicit offset.',
     }),
   ),
 });
@@ -24,7 +30,8 @@ const createItemParameters = obj({
 const updateItemParameters = obj({
   itemId: str({ minLength: 1, description: 'Existing item id or a temp id returned by create_item' }),
   title: opt(str({ minLength: 1, maxLength: 200 })),
-  dueAt: opt(str({ description: 'ISO 8601 date-time with an explicit offset' })),
+  dueAt: opt(str({ description: 'Deadline, ISO 8601 date-time with an explicit offset' })),
+  scheduledAt: opt(str({ description: 'Planned working time, ISO 8601 with an explicit offset' })),
 });
 
 const itemIdParameters = obj({
@@ -40,7 +47,8 @@ const searchParameters = obj({
 const candidateActionParameters = obj({
   title: str({ minLength: 1, maxLength: 200 }),
   owner: opt(str({ maxLength: 100 })),
-  dueAt: opt(str({ description: 'ISO 8601 date-time with an explicit +08:00 offset' })),
+  dueAt: opt(str({ description: 'Deadline, ISO 8601 date-time with an explicit +08:00 offset' })),
+  scheduledAt: opt(str({ description: 'Planned working time, only when the transcript says it' })),
   evidence: opt(str({ maxLength: 1000 })),
   confidence: opt(num({ minimum: 0, maximum: 1 })),
 });
@@ -69,7 +77,7 @@ export function createAgentTools(staging: Staging): AgentTool<any>[] {
   const updateItem: AgentTool<typeof updateItemParameters> = {
     name: 'update_item',
     label: 'Update item',
-    description: 'Change the title or dueAt of an existing item. Provide itemId and at least one field.',
+    description: 'Change the title, deadline or planned time of an existing item. Provide itemId and at least one field.',
     parameters: updateItemParameters,
     executionMode: 'sequential',
     execute: async (_toolCallId, params) => {

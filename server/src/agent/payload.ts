@@ -8,6 +8,7 @@ export const candidateActionSchema = z
     title: z.string().trim().min(1).max(200),
     owner: z.string().max(100).optional(),
     dueAt: dateTime.optional(),
+    scheduledAt: dateTime.optional(),
     evidence: z.string().max(1000).optional(),
     confidence: z.number().min(0).max(1).optional(),
   })
