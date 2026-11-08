@@ -9,7 +9,7 @@ PORT ?= 8080
 export PUB_CACHE := $(CURDIR)/.cache/pub
 export FLUTTER_SUPPRESS_ANALYTICS := true
 
-.PHONY: deps check check-all check-server check-app docs breaking contract test e2e baseline
+.PHONY: deps check check-all check-server check-app docs breaking contract test e2e smoke-ios baseline
 
 ## 首次使用：只装门禁脚本自己用的依赖
 deps:
@@ -47,6 +47,10 @@ test:
 
 e2e:
 	PORT=$(PORT) bash scripts/e2e.sh
+
+## iOS 冒烟：模拟器上装包 + 真实登录，不消耗 AI 额度
+smoke-ios:
+	bash scripts/smoke-ios.sh
 
 ## 发布时把当前契约冻结为新的比对基线
 baseline:
