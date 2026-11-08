@@ -107,6 +107,9 @@ export class Staging {
     if (kind === 'reminder' && !dueAt) {
       throw new Error('A reminder requires dueAt');
     }
+    if (kind === 'reminder' && scheduledAt) {
+      throw new Error('A reminder cannot have scheduledAt');
+    }
     const tempId = `new_${++this.createCount}`;
     const operation: CreateOp = { type: 'create', tempId, kind, title, dueAt, scheduledAt };
     this.operations.push(operation);

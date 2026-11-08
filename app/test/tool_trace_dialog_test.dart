@@ -14,7 +14,7 @@ void main() {
       'dueAt': '2026-11-08T10:00:00+08:00',
     });
 
-    expect(fields.map((field) => field.label), ['标题', '类型', '时间']);
+    expect(fields.map((field) => field.label), ['标题', '类型', '截止时间']);
     expect(fields[0].value, '买牛奶');
     expect(fields[1].value, '待办');
     expect(fields[2].value, formatDateTime(DateTime.parse('2026-11-08T10:00:00+08:00')));

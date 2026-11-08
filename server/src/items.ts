@@ -76,6 +76,9 @@ export function registerItemRoutes(app: FastifyInstance): void {
     if (body.kind === 'reminder' && !body.dueAt) {
       throw invalidInput('A reminder requires dueAt', { dueAt: 'Required for reminders' });
     }
+    if (body.kind === 'reminder' && body.scheduledAt) {
+      throw invalidInput('A reminder cannot have scheduledAt');
+    }
     const thread = getOwnedThread(app, user.id, body.threadId);
     if (body.sourceMessageId !== undefined && body.candidateIndex !== undefined) {
       const source = app.db
@@ -145,6 +148,9 @@ export function registerItemRoutes(app: FastifyInstance): void {
     const row = findMutableItem(app, user.id, itemId);
     if (body.dueAt === null && row.kind === 'reminder') {
       throw invalidInput('A reminder requires dueAt', { dueAt: 'Cannot clear a reminder time' });
+    }
+    if (body.scheduledAt !== undefined && row.kind === 'reminder') {
+      throw invalidInput('A reminder cannot have scheduledAt');
     }
     const timestamp = app.now().toISOString();
     const patch: Partial<ItemRow> = { updatedAt: timestamp };

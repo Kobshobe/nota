@@ -116,7 +116,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
       if (!mounted) return item != null;
       if (item != null) {
-        final suffix = action.dueAt == null ? '' : '，已安排通知';
+        final at = kind == ItemKind.reminder ? action.dueAt : action.scheduledAt;
+        final suffix = at == null ? '' : '，已安排通知';
         AppSnackBar.show(
           context,
           kind == ItemKind.todo ? '已加入待办$suffix' : '已加入提醒$suffix',

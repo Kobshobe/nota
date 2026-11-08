@@ -12,7 +12,10 @@ function result(details: object, terminate = false) {
 
 const createItemParameters = obj({
   title: str({ minLength: 1, maxLength: 200, description: 'Item title in Chinese' }),
-  kind: opt(oneOf(['reminder', 'todo'], { description: 'reminder needs dueAt; todo may omit it' })),
+  kind: oneOf(['reminder', 'todo'], {
+    description:
+      'reminder is a one-off notification and needs a clock time in dueAt; todo is a task with optional deadline (dueAt) and planned time (scheduledAt)',
+  }),
   dueAt: opt(
     str({
       description:

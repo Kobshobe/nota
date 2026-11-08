@@ -235,6 +235,12 @@ paths:
       description: 音频在失败后保留 24 小时；重试复用已创建的会议，不会重复建会或扣额度。
       parameters:
         - $ref: '#/components/parameters/RecordingId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
       responses:
         '202':
           description: 已重新排队
@@ -342,6 +348,12 @@ paths:
       summary: 删除事项
       parameters:
         - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
       responses:
         '204':
           description: 已删除
@@ -356,6 +368,12 @@ paths:
       summary: 标记事项完成
       parameters:
         - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmptyRequest'
       responses:
         '200':
           description: 已完成的事项
@@ -708,6 +726,8 @@ components:
             required: [kind]
           then:
             required: [dueAt]
+            not:
+              required: [scheduledAt]
         - dependentRequired:
             sourceMessageId: [candidateIndex]
             candidateIndex: [sourceMessageId]
@@ -791,6 +811,10 @@ components:
         createdAt:
           type: string
           format: date-time
+    EmptyRequest:
+      type: object
+      additionalProperties: false
+      description: 没有参数；客户端可以不带 body，或带一个空对象
     ErrorResponse:
       type: object
       additionalProperties: false

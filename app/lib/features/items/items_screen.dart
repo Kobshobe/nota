@@ -184,8 +184,8 @@ class _ItemsScreenState extends ConsumerState<ItemsScreen> {
   Widget _buildList(List<Item> items) {
     final open = items.where((item) => item.status == ItemStatus.open).toList()
       ..sort((a, b) {
-        final aDue = a.dueAt;
-        final bDue = b.dueAt;
+        final aDue = a.dueAt ?? a.scheduledAt;
+        final bDue = b.dueAt ?? b.scheduledAt;
         if (aDue == null && bDue == null) return 0;
         if (aDue == null) return 1;
         if (bDue == null) return -1;

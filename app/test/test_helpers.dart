@@ -306,6 +306,9 @@ class FakeApi implements NotaApi {
       kind: old.kind,
       title: title ?? old.title,
       dueAt: clearDueAt ? null : (dueAt ?? old.dueAt),
+      scheduledAt: clearScheduledAt
+          ? null
+          : (scheduledAt ?? old.scheduledAt),
       sourceMessageId: old.sourceMessageId,
       candidateIndex: old.candidateIndex,
       status: old.status,

@@ -11,7 +11,10 @@ export function buildSystemPrompt(input: SystemPromptInput): string {
   const { thread, items, now } = input;
   const itemLines = items.map((item) => {
     const due = item.dueAt ? ` | dueAt=${shanghaiIso(new Date(item.dueAt))}` : '';
-    return `- id=${item.id} | ${item.kind} | ${item.status} | ${item.title}${due}`;
+    const scheduled = item.scheduledAt
+      ? ` | scheduledAt=${shanghaiIso(new Date(item.scheduledAt))}`
+      : '';
+    return `- id=${item.id} | ${item.kind} | ${item.status} | ${item.title}${due}${scheduled}`;
   });
   const itemBlock = itemLines.length > 0 ? itemLines.join('\n') : '（暂无未完成事项）';
   const threadKind = thread.kind === 'meeting' ? '会议' : '日常';
