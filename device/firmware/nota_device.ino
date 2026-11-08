@@ -290,6 +290,11 @@ bool uploadRecording() {
       delay(2000);
     }
     posted = httpPost(baseUrl + "/api/device/recordings", body, response, code);
+    if (!posted && code != 0 && code != HTTPC_ERROR_CONNECTION_REFUSED &&
+        code != HTTPC_ERROR_NOT_CONNECTED) {
+      // 请求可能已经到达服务端，只是没拿到响应；重发可能建第二场会。
+      break;
+    }
   }
   if (!posted) {
     Serial.println("upload: request failed");

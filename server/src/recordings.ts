@@ -352,9 +352,19 @@ export async function recoverRecordings(app: FastifyInstance): Promise<void> {
     const threadMessages = threadId
       ? app.db.select().from(messages).where(eq(messages.threadId, threadId)).all()
       : [];
+    const recordingMessage = threadMessages.find(
+      (message) =>
+        message.role === 'user' && message.clientMessageId === clientMessageIdFor(row.id),
+    );
+    const assistantMessage = recordingMessage
+      ? threadMessages.find(
+          (message) =>
+            message.role === 'assistant' && message.userMessageId === recordingMessage.id,
+        )
+      : undefined;
 
-    // Agent 已经写完 assistant 消息：这场会议实际已经完成，补回 completed 即可。
-    if (threadMessages.some((message) => message.role === 'assistant')) {
+    // Agent 已经写完这条录音的 assistant 消息：这场会议实际已经完成，补回 completed。
+    if (assistantMessage) {
       if (row.audioPath) await rm(row.audioPath, { force: true });
       app.db
         .update(recordings)
@@ -370,26 +380,36 @@ export async function recoverRecordings(app: FastifyInstance): Promise<void> {
       continue;
     }
 
-    // 只写了用户消息就中断：退回已扣额度，删掉空会议，重传时不会重复扣。
+    // 只写了录音的用户消息就中断：退回已扣额度，删掉这条录音的消息和空会议。
+    let keepThreadId = threadId;
     if (threadId) {
-      const userMessage = threadMessages.find((message) => message.role === 'user');
-      if (userMessage) {
+      if (recordingMessage) {
         refundQuota(
           app.db,
           row.userId,
-          dayInTimeZone(new Date(userMessage.createdAt), app.config.quotaTimezone),
+          dayInTimeZone(new Date(recordingMessage.createdAt), app.config.quotaTimezone),
           now,
         );
-        app.db.delete(messages).where(eq(messages.threadId, threadId)).run();
+        app.db.delete(messages).where(eq(messages.userMessageId, recordingMessage.id)).run();
+        app.db.delete(messages).where(eq(messages.id, recordingMessage.id)).run();
       }
-      app.db.delete(threads).where(eq(threads.id, threadId)).run();
+      const remaining =
+        app.db
+          .select({ count: sql<number>`count(*)` })
+          .from(messages)
+          .where(eq(messages.threadId, threadId))
+          .get()?.count ?? 0;
+      if (remaining === 0) {
+        app.db.delete(threads).where(eq(threads.id, threadId)).run();
+        keepThreadId = null;
+      }
     }
 
     app.db
       .update(recordings)
       .set({
         status: 'failed',
-        threadId: null,
+        threadId: keepThreadId,
         errorCode: 'INTERRUPTED',
         errorMessage: 'The server restarted while transcribing',
         updatedAt: now.toISOString(),

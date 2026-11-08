@@ -399,11 +399,12 @@ describe('场景：设备会议录音 → 纪要', () => {
         updatedAt: now,
       })
       .run();
+    const userMessageId = randomUUID();
     ctx.app.db
       .insert(messages)
       .values([
         {
-          id: randomUUID(),
+          id: userMessageId,
           threadId,
           role: 'user' as const,
           content: '说话人 1：开始开会。',
@@ -420,7 +421,7 @@ describe('场景：设备会议录音 → 纪要', () => {
           content: '已整理。',
           payloadJson: null,
           clientMessageId: null,
-          userMessageId: null,
+          userMessageId,
           responseJson: null,
           createdAt: now,
         },
