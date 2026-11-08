@@ -76,6 +76,7 @@ lib/
 - Riverpod 管状态；`AsyncValue` 表达加载/错误/数据。
 - 模型手写 `fromJson` / `toJson`，不上 freezed / codegen。
 - `go_router` 做登录重定向；token 存 secure storage；通知用 `flutter_local_notifications`。
+- 未签名的模拟器包写 Keychain 会报 -34018：此时退化成内存会话，登录照常，重启后重新登录。
 - 不搞 `data/domain/presentation` 三层；一个 feature 一组 screen / controller / models。
 
 ### 4.2 Dio 拦截器

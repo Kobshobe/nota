@@ -95,12 +95,14 @@ class AuthStore extends ChangeNotifier {
   }
 
   Future<void> save(String token, NotaUser user) async {
-    await _storage.writeToken(token);
     try {
+      await _storage.writeToken(token);
       await _storage.writeUser(jsonEncode(user.toJson()));
-    } catch (_) {
-      await _storage.clear();
-      rethrow;
+    } catch (error) {
+      // 未签名的模拟器包没有 keychain entitlement（-34018），写入必然失败；
+      // 这不该挡住登录，退化成只保留本次会话，重启后重新登录。
+      debugPrint('保存登录状态失败，本次会话只在内存中：$error');
+      await _clearStorageQuietly();
     }
     _token = token;
     _user = user;
@@ -109,7 +111,7 @@ class AuthStore extends ChangeNotifier {
 
   Future<void> clear() async {
     if (_token == null && _user == null) return;
-    await _storage.clear();
+    await _clearStorageQuietly();
     _token = null;
     _user = null;
     notifyListeners();
@@ -117,6 +119,14 @@ class AuthStore extends ChangeNotifier {
       await onSessionCleared?.call();
     } catch (error) {
       debugPrint('clear notifications failed: $error');
+    }
+  }
+
+  Future<void> _clearStorageQuietly() async {
+    try {
+      await _storage.clear();
+    } catch (error) {
+      debugPrint('清除登录状态失败：$error');
     }
   }
 }
