@@ -193,7 +193,7 @@ server/test/
 
 - 设备端在 `device/`：Arduino 固件、Wokwi 电路、运行手册。
 - 设备身份：`devices` 存 token hash，明文只在 seed 输出；设备用 Bearer。
-- 设备音频用内嵌 MP3，I2S 不在模拟范围；`setInsecure()` 只用于本地隧道；链路是 202 + 轮询 → ASR → 日常 thread → Agent → TTS。
+- 设备音频用内嵌会议 MP3，I2S 不在模拟范围；`setInsecure()` 只用于本地隧道；链路是 202 + 轮询 → ASR → 建会 → Agent 纪要，无音频下行。
 - 固件手动在 Wokwi 验收；服务端测试覆盖主路径与失败路径。
 
 ## 6. 测试

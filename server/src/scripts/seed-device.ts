@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, isNull } from 'drizzle-orm';
-import { ensureDailyThread, normalizeEmail } from '../auth';
+import { normalizeEmail } from '../auth';
 import { loadConfig } from '../config';
 import { createDb, migrateDb } from '../db';
 import { devices, users } from '../db/schema';
@@ -48,7 +48,6 @@ if (!user) {
     .run();
 }
 
-ensureDailyThread(db, user.id, now);
 // 同名设备只保留最新一台：旧 token 不能继续用来跑演示。
 db.update(devices)
   .set({ revokedAt: timestamp })

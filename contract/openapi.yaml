@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.6.0
+  version: 0.7.0
   description: |
     Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
@@ -13,7 +13,7 @@ info:
     - 单次文字输入上限 20,000 字符。
     - 写消息带 clientMessageId；同键重试返回原结果，不重复创建或扣额度。
     - 会议录音单次上限 8 分钟（480 秒）；转写在服务端异步完成，成功后才会创建会议。
-    - 设备语音默认上限 60 秒 / 5 MB（服务端可调小）；转写、Agent 和 TTS 在服务端异步完成，成功后写入日常 thread。
+    - 设备会议录音默认上限 480 秒 / 12 MB（与 App 会议录音一致）；转写在服务端异步完成，成功后创建会议并生成纪要，设备不接收音频。
 security:
   - bearerAuth: []
 servers:
@@ -259,12 +259,12 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /api/device/utterances:
+  /api/device/recordings:
     post:
       tags: [devices]
-      operationId: uploadDeviceUtterance
-      summary: 设备上传一段语音并开始异步处理
-      description: 转写成功后写入设备所属用户的日常 thread，再由 Agent 处理并生成语音回复；额度在同一路径上扣减。
+      operationId: uploadDeviceRecording
+      summary: 设备上传一场会议录音并开始异步转写
+      description: 转写成功后创建会议 thread 并生成纪要；设备只负责上传和查询，不接收音频。
       security:
         - deviceAuth: []
       requestBody:
@@ -279,25 +279,25 @@ paths:
                 audio:
                   type: string
                   format: binary
-                  description: mp3 / wav / m4a 等，默认上限 5 MB
+                  description: 音频；上限与 App 会议录音一致，默认 12 MB
                 durationMs:
                   type: integer
                   minimum: 1
-                  maximum: 60000
-                  description: 设备测得的时长；服务端仍会按转写时长复核
+                  maximum: 480000
+                  description: 设备测得的录音时长，默认上限 480 秒
       responses:
         '202':
-          description: 已接收，处理中
+          description: 已接收，转写中
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceUtterance'
+                $ref: '#/components/schemas/Recording'
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '413':
-          description: 音频超过上限（默认 5 MB）
+          description: 音频超过上限（默认 12 MB）
           content:
             application/json:
               schema:
@@ -310,44 +310,22 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
-  /api/device/utterances/{utteranceId}:
+  /api/device/recordings/{recordingId}:
     get:
       tags: [devices]
-      operationId: getDeviceUtterance
-      summary: 查询设备语音的处理状态
+      operationId: getDeviceRecording
+      summary: 查询设备会议录音的转写状态
       security:
         - deviceAuth: []
       parameters:
-        - $ref: '#/components/parameters/UtteranceId'
+        - $ref: '#/components/parameters/RecordingId'
       responses:
         '200':
-          description: 当前状态；completed 时带回复文本，TTS 成功时带回复音频地址
+          description: 录音状态；completed 时带 threadId
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeviceUtterance'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /api/device/utterances/{utteranceId}/reply-audio:
-    get:
-      tags: [devices]
-      operationId: getDeviceUtteranceReplyAudio
-      summary: 下载合成好的语音回复
-      description: 仅在 completed 且 TTS 成功时可用；音频默认保留 1 小时（服务端可配）。
-      security:
-        - deviceAuth: []
-      parameters:
-        - $ref: '#/components/parameters/UtteranceId'
-      responses:
-        '200':
-          description: mp3 音频
-          content:
-            audio/mpeg:
-              schema:
-                type: string
-                format: binary
+                $ref: '#/components/schemas/Recording'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -521,12 +499,6 @@ components:
         type: string
     RecordingId:
       name: recordingId
-      in: path
-      required: true
-      schema:
-        type: string
-    UtteranceId:
-      name: utteranceId
       in: path
       required: true
       schema:
@@ -915,29 +887,6 @@ components:
           type: string
           enum: [TRANSCRIPTION_FAILED, QUOTA_EXCEEDED, INTERRUPTED]
           description: 仅 failed 时存在；INTERRUPTED 表示服务重启打断了任务
-        createdAt:
-          type: string
-          format: date-time
-    DeviceUtterance:
-      type: object
-      additionalProperties: false
-      required: [id, status, createdAt]
-      properties:
-        id:
-          type: string
-        status:
-          type: string
-          enum: [processing, completed, failed]
-        replyText:
-          type: string
-          description: 仅 completed 时存在；设备播放用的截断文本，不超过 TTS_MAX_CHARS（默认 200）
-        replyAudioUrl:
-          type: string
-          description: 仅 completed 且 TTS 成功时存在；相对路径，需带设备 token 下载
-        errorCode:
-          type: string
-          enum: [TRANSCRIPTION_FAILED, QUOTA_EXCEEDED, AGENT_FAILED, INTERRUPTED]
-          description: 仅 failed 时存在；AGENT_FAILED 表示 Agent 阶段失败
         createdAt:
           type: string
           format: date-time

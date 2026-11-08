@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const source = process.argv[2] ?? path.join(root, 'device/fixtures/utterance-01.mp3');
+const source = process.argv[2] ?? path.join(root, 'device/fixtures/meeting-01.mp3');
 const target = process.argv[3] ?? path.join(root, 'device/firmware/fixture.h');
 
 const encoded = readFileSync(source).toString('base64');
