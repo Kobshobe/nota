@@ -192,6 +192,7 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
       }
 
       final bytes = await ref.read(recordingBytesProvider)(path);
+      if (kDebugMode) debugPrint('[recorder] bytes=${bytes.length}');
       if (bytes.length < 1024) {
         // 浏览器偶尔会给出只有容器头的空录音，直接当「没录到声音」。
         await discardRecording(path);

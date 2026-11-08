@@ -42,9 +42,11 @@ class DeviceMeetingRecorder implements MeetingRecorder {
     await _recorder.start(
       // 浏览器只稳定支持 webm/opus；iOS 直接录 m4a。
       RecordConfig(
+        // 44.1 kHz / 96 kbps 与 enjournal 里验证过可用的配置一致；
+        // 模拟器对 16 kHz 输入不买账时会录出空文件。
         encoder: kIsWeb ? AudioEncoder.opus : AudioEncoder.aacLc,
-        sampleRate: kIsWeb ? 48000 : 16000,
-        bitRate: 64000,
+        sampleRate: kIsWeb ? 48000 : 44100,
+        bitRate: kIsWeb ? 64000 : 96000,
         numChannels: 1,
       ),
       path: path,
