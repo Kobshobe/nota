@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -10,9 +9,11 @@ import '../../shared/widgets/empty_view.dart';
 import '../../shared/widgets/error_view.dart';
 import '../../shared/format.dart';
 import '../items/models.dart';
+import 'chat_composer.dart';
 import 'chat_controller.dart';
 import 'message_bubble.dart';
 import 'models.dart';
+import 'timeline.dart';
 import 'threads_controller.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -27,8 +28,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
-  bool _creatingMeeting = false;
-
+  bool _openingMeeting = false;
   @override
   void initState() {
     super.initState();
@@ -39,20 +39,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
-  /// 主对话右上角的会议入口：不填标题，服务端用默认「新会议」。
-  Future<void> _startMeeting() async {
-    if (_creatingMeeting) return;
-    setState(() => _creatingMeeting = true);
+  /// 主对话右上角的会议入口：先进空白会议页，发了内容才真正建会议。
+  Future<void> _openNewMeeting() async {
+    if (_openingMeeting) return;
+    _openingMeeting = true;
     try {
-      final thread = await ref.read(threadsProvider.notifier).createMeeting();
-      if (!mounted) return;
-      context.push('/chat/${thread.id}');
-    } on ApiException catch (error) {
-      if (mounted) {
-        AppSnackBar.show(context, error.userMessage, isError: true);
-      }
+      await context.push('/meeting/new');
     } finally {
-      if (mounted) setState(() => _creatingMeeting = false);
+      _openingMeeting = false;
     }
   }
 
@@ -83,7 +77,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!mounted) return;
     if (ok && _inputController.text == content) {
       _inputController.clear();
-      setState(() {});
     }
   }
 
@@ -94,7 +87,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!mounted) return;
     if (ok && _inputController.text == pending) {
       _inputController.clear();
-      setState(() {});
     }
   }
 
@@ -181,14 +173,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             IconButton(
               key: const ValueKey('start-meeting'),
               tooltip: '新建会议',
-              onPressed: _creatingMeeting ? null : _startMeeting,
-              icon: _creatingMeeting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.call_outlined, size: 22),
+              onPressed: _openNewMeeting,
+              icon: const Icon(Icons.call_outlined, size: 22),
             ),
           const SizedBox(width: 8),
         ],
@@ -206,18 +192,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildChat(ChatState state) {
-    final overLimit = _inputController.text.length > maxMessageLength;
-    final canSend =
-        !state.sending && _inputController.text.trim().isNotEmpty && !overLimit;
+    final threads = ref.watch(threadsProvider).value ?? const <NotaThread>[];
+    final meetings = state.thread.kind == ThreadKind.daily
+        ? threads.where((thread) => thread.kind == ThreadKind.meeting).toList()
+        : const <NotaThread>[];
+    final entries = buildTimeline(messages: state.messages, meetings: meetings);
 
     return Column(
       children: [
-        if (state.thread.kind == ThreadKind.daily) const _MeetingCards(),
         Expanded(
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 860),
-              child: state.messages.isEmpty
+              child: entries.isEmpty
                   ? EmptyView(
                       icon: state.thread.kind == ThreadKind.meeting
                           ? Icons.groups_outlined
@@ -232,9 +219,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   : ListView.builder(
                       controller: _scrollController,
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                      itemCount: state.messages.length,
+                      itemCount: entries.length,
                       itemBuilder: (context, index) {
-                        final message = state.messages[index];
+                        final entry = entries[index];
+                        final meeting = entry.meeting;
+                        if (meeting != null) {
+                          return _MeetingTile(thread: meeting);
+                        }
+                        final message = entry.message!;
                         return MessageBubble(
                           message: message,
                           toolCalls:
@@ -291,97 +283,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
             ),
           ),
-        SafeArea(
-          top: false,
-          child: Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            decoration: const BoxDecoration(
-              color: AppColors.paper,
-              border: Border(top: BorderSide(color: AppColors.border)),
-            ),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 860),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            key: const ValueKey('chat-input'),
-                            controller: _inputController,
-                            minLines: 1,
-                            maxLines: 5,
-                            maxLength: maxMessageLength,
-                            maxLengthEnforcement: MaxLengthEnforcement.none,
-                            keyboardType: TextInputType.multiline,
-                            textInputAction: TextInputAction.newline,
-                            onChanged: (_) => setState(() {}),
-                            decoration: const InputDecoration(
-                              hintText: '记下一句话，或粘贴会议文字…',
-                              counterText: '',
-                            ),
-                            buildCounter:
-                                (
-                                  context, {
-                                  required currentLength,
-                                  required isFocused,
-                                  required maxLength,
-                                }) {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(
-                                      top: 5,
-                                      left: 4,
-                                    ),
-                                    child: Text(
-                                      '$currentLength / $maxLength',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: currentLength > maxMessageLength
-                                            ? AppColors.danger
-                                            : AppColors.muted,
-                                      ),
-                                    ),
-                                  );
-                                },
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        IconButton.filled(
-                          key: const ValueKey('chat-send'),
-                          onPressed: canSend ? _send : null,
-                          tooltip: '发送',
-                          icon: state.sending
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.arrow_upward, size: 20),
-                        ),
-                      ],
-                    ),
-                    if (overLimit)
-                      const Padding(
-                        padding: EdgeInsets.only(left: 4, top: 2),
-                        child: Text(
-                          '单条消息最多 20,000 字，请精简后再发送',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.danger,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        ChatComposer(
+          controller: _inputController,
+          sending: state.sending,
+          onSend: _send,
         ),
       ],
     );
@@ -443,95 +348,87 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
-/// 主对话里的会议入口：最近几场会议，点卡片回到那场会议。
-class _MeetingCards extends ConsumerWidget {
-  const _MeetingCards();
-
-  static const _maxShown = 5;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final threads = ref.watch(threadsProvider).value ?? const <NotaThread>[];
-    final meetings = threads
-        .where((thread) => thread.kind == ThreadKind.meeting)
-        .take(_maxShown)
-        .toList();
-    if (meetings.isEmpty) return const SizedBox.shrink();
-
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 860),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 2),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '最近会议',
-                style: TextStyle(fontSize: 12.5, color: AppColors.muted),
-              ),
-              const SizedBox(height: 8),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    for (var index = 0; index < meetings.length; index++) ...[
-                      if (index > 0) const SizedBox(width: 8),
-                      _MeetingCard(thread: meetings[index]),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MeetingCard extends StatelessWidget {
-  const _MeetingCard({required this.thread});
+/// 日常对话里代表一场会议：点进去继续那场会议。
+class _MeetingTile extends StatelessWidget {
+  const _MeetingTile({required this.thread});
 
   final NotaThread thread;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        key: ValueKey('meeting-card-${thread.id}'),
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => context.push('/chat/${thread.id}'),
-        child: Container(
-          width: 188,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
+    final title = thread.title.trim().isEmpty ? '未命名会议' : thread.title;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Material(
+            color: AppColors.surface,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                thread.title.trim().isEmpty ? '未命名会议' : thread.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.ink,
+            child: InkWell(
+              key: ValueKey('meeting-card-${thread.id}'),
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => context.push('/chat/${thread.id}'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.groups_outlined,
+                      size: 18,
+                      color: AppColors.sage,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Text(
+                            '会议',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.muted,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      formatThreadTime(thread.createdAt),
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.muted,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: AppColors.muted,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                formatThreadTime(thread.updatedAt),
-                style: const TextStyle(fontSize: 11.5, color: AppColors.muted),
-              ),
-            ],
+            ),
           ),
         ),
       ),

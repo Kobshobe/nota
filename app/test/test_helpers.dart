@@ -81,6 +81,7 @@ class FakeApi implements NotaApi {
     })
   >
   createItemCalls = [];
+  final Map<String, List<ChatMessage>> threadMessages = {};
   final List<String> deletedIds = [];
   final List<String> completedIds = [];
 
@@ -125,7 +126,10 @@ class FakeApi implements NotaApi {
     if (current != null && current.thread.id == threadId) return current;
     for (final thread in threads) {
       if (thread.id != threadId) continue;
-      return ThreadDetail(thread: thread, messages: const []);
+      return ThreadDetail(
+        thread: thread,
+        messages: threadMessages[threadId] ?? const [],
+      );
     }
     throw const ApiException(
       code: ApiErrorCode.notFound,
@@ -166,6 +170,10 @@ class FakeApi implements NotaApi {
       payload: responsePayload,
       createdAt: now,
     );
+    threadMessages.putIfAbsent(threadId, () => []).addAll([
+      userMessage,
+      assistantMessage,
+    ]);
     usage = Usage(
       used: usage.used + 1,
       limit: usage.limit,

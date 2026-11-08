@@ -83,13 +83,13 @@ cd <main-worktree>
 
 | 动了什么 | 必跑 | 跑什么 |
 |---|---|---|
-| 文档、`.changes` | `make check` | 文档门禁 + 契约破坏性 |
-| 服务端 | `make check-server` | 再加 tsc、服务端测试、运行时契约 |
-| 客户端 | `make check-app` | 再加 analyze、客户端测试 |
-| 鉴权、存储、原生插件、依赖，或要说「iOS 可用」 | `make smoke-ios` | 模拟器装包 + 真实登录，不烧额度 |
+| 文档、`.changes` | `make check` | 文档 + 契约 |
+| 服务端 | `make check-server` | 再加 tsc、单测、运行时契约 |
+| 客户端 | `make check-app` | 再加 analyze、单测 |
+| 鉴权、存储、原生插件、依赖，或要说「iOS 可用」 | `make smoke-ios` | 装包 + 真实登录 |
 | 演示、发布前 | `make check-all` + `make smoke-ios` + `E2E_MESSAGE=1 make e2e` | 全量 + 真实模型 |
 
-不是每次都全跑。没跑过的平台只写「编译通过」；平台边界必须在真环境跑；兜底逻辑要有故障注入测试。门禁失败就是没做完，只有自动化门禁、没有独立 review 也不算完成。
+日常只跑 `make test-fast`（两端单测）；上面这些留给提交前或碰契约、平台边界时。没跑过的平台只写「编译通过」；平台边界要真机验证；兜底要有故障测试。门禁失败就是没做完，没有独立 review 也不算完成。
 
 ## 端到端约定
 

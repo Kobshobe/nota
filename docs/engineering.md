@@ -62,6 +62,9 @@ lib/
   features/
     auth/login_screen.dart
     chat/chat_screen.dart
+    chat/new_meeting_screen.dart
+    chat/chat_composer.dart
+    chat/timeline.dart
     chat/chat_controller.dart
     chat/models.dart
     items/items_screen.dart

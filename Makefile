@@ -9,7 +9,7 @@ PORT ?= 8080
 export PUB_CACHE := $(CURDIR)/.cache/pub
 export FLUTTER_SUPPRESS_ANALYTICS := true
 
-.PHONY: deps check check-all check-server check-app docs breaking contract test e2e smoke-ios baseline
+.PHONY: deps check check-all check-server check-app docs breaking contract test test-fast e2e smoke-ios baseline
 
 ## 首次使用：只装门禁脚本自己用的依赖
 deps:
@@ -25,6 +25,13 @@ check-server: docs breaking
 
 check-app: docs breaking
 	@test -d $(CLIENT_DIR) || { echo "$(CLIENT_DIR)/ 不存在：先实现客户端，或改 Makefile 的 CLIENT_DIR"; exit 1; }
+	$(CLIENT_TEST)
+
+## 日常回路：只跑两端单测（几秒），不跑契约、e2e、构建
+test-fast:
+	@test -d $(SERVER_DIR) || { echo "$(SERVER_DIR)/ 不存在"; exit 1; }
+	@test -d $(CLIENT_DIR) || { echo "$(CLIENT_DIR)/ 不存在"; exit 1; }
+	$(SERVER_TEST)
 	$(CLIENT_TEST)
 
 ## 完成标准：两端都在
