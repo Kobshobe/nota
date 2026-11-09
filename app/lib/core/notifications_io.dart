@@ -65,6 +65,28 @@ class AppNotificationService {
     );
   }
 
+  /// 立即弹一条本地通知（设备会议整理完成这类服务端事件）。
+  Future<void> show({
+    required String id,
+    required String title,
+    required String body,
+  }) async {
+    await init();
+    await _plugin.show(
+      id: _notificationId(id),
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
+      ),
+      payload: id,
+    );
+  }
+
   Future<void> cancel(String itemId) async {
     final initialized = _initialized;
     if (initialized == null) return;

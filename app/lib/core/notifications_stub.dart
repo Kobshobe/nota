@@ -8,6 +8,12 @@ class AppNotificationService {
 
   Future<void> schedule(Item item) async {}
 
+  Future<void> show({
+    required String id,
+    required String title,
+    required String body,
+  }) async {}
+
   Future<void> cancel(String itemId) async {}
 
   Future<void> cancelAll() async {}

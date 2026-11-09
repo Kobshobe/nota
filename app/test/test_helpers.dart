@@ -18,6 +18,7 @@ import 'package:nota/features/items/models.dart';
 class FakeNotificationService implements AppNotificationService {
   final List<Item> scheduled = [];
   final List<String> cancelled = [];
+  final List<({String id, String title, String body})> shown = [];
   int cancelAllCalls = 0;
 
   @override
@@ -29,6 +30,15 @@ class FakeNotificationService implements AppNotificationService {
   @override
   Future<void> schedule(Item item) async {
     scheduled.add(item);
+  }
+
+  @override
+  Future<void> show({
+    required String id,
+    required String title,
+    required String body,
+  }) async {
+    shown.add((id: id, title: title, body: body));
   }
 
   @override
