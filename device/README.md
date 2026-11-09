@@ -2,7 +2,7 @@
 
 用 Wokwi 网页免费版模拟 Nota 的会议录音笔：按一下 GPIO4 开始录音，会议结束再按一下，整段会议音频经 Wi-Fi 上传；服务端转写、创建会议并生成纪要，纪要出现在 App 的主对话时间线。设备只录音，不播放任何声音。
 
-设计与状态机见 [design.md](design.md)。模拟器没有麦克风、扬声器和 BLE：输入是内嵌的一段固定会议音频，按钮、LED、上传与轮询真实运行；设备身份由 seed 预置，跳过配网与手机绑定。
+设计与状态机见 [design.md](design.md)。模拟器没有麦克风、扬声器和 BLE：输入是内嵌的一段固定会议音频，按钮、LED 与上传真实运行；设备身份由 seed 预置，跳过配网与手机绑定。
 
 ## 前置
 
@@ -71,8 +71,6 @@ recording: stopped
 upload: sending
 upload: HTTP 202
 upload: id=...
-poll: transcribing
-completed: thread=...
 state: idle
 ```
 
@@ -105,6 +103,7 @@ node device/tools/embed-fixture.mjs
 - **免费版走公共网关**：Wokwi 官方说明公共网关会监控流量；token 和音频内容也会经过它，不要放真实敏感数据。
 - **隧道域名会变**：每次重启 cloudflared 都要重新粘贴地址；Wokwi 连不上 Cloudflare 时可以用 `npx localtunnel --port 8080` 换一个域名；`http://` 地址只用于模拟器，token 会明文传输。
 - **单场会议上限**：480 秒 / 12 MB；模拟器 fixture 约 13 秒，不会触发上限。
+- **设备不等纪要**：拿到 202 就结束；转写失败只在服务端日志里，设备不会重试。
 
 ## 排查
 
@@ -112,7 +111,6 @@ node device/tools/embed-fixture.mjs
 |---|---|
 | `upload: HTTP 401` | token 错或已撤销；重跑 seed 拿新 token |
 | `failed: QUOTA_EXCEEDED` | demo 账号当天 10 次用完；等重置或换账号 |
-| `poll: timed out` | 隧道或服务断了；看 cloudflared 与 server 日志 |
 | `failed: TRANSCRIPTION_FAILED` | 服务端转写失败；看 server 日志，按一下重试 |
 | `upload: request failed` | 隧道域名过期或网络断；重新注入地址 |
 | 串口没有输出 | 检查 `esptool`/串口监视器是否连到板子，或重置模拟器 |

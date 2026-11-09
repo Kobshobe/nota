@@ -1,6 +1,6 @@
 // Nota 会议录音设备模拟器：Wokwi ESP32 DevKitC V4 + Arduino。
 // 真机用 I2S 麦克风录音、microSD 存整场会议；模拟器没有麦克风，
-// 输入是内嵌的一段会议音频，按钮、LED、上传和轮询与真机同一条状态机。
+// 输入是内嵌的一段会议音频，按钮、LED 和上传与真机同一条状态机。
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
@@ -16,8 +16,6 @@ const int BUTTON_PIN = 4;
 const int LED_PIN = 5;
 const unsigned long MAX_RECORDING_MS = 480000UL;
 const unsigned long FIXTURE_DURATION_MS = 12979UL;
-const unsigned long POLL_INTERVAL_MS = 5000UL;
-const unsigned long POLL_TIMEOUT_MS = 300000UL;
 const unsigned long FAIL_BLINK_MS = 10000UL;
 const unsigned long LONG_PRESS_MS = 2000UL;
 const char* BOUNDARY = "----notaDeviceBoundary";
@@ -30,7 +28,6 @@ WiFiClientSecure tls;
 WiFiClient plain;
 DeviceState state = IDLE;
 bool hasPending = false;
-String pendingId;
 unsigned long recordingStartedAt = 0;
 bool buttonWasDown = false;
 bool pressConsumed = false;
@@ -227,49 +224,7 @@ bool httpGet(const String& url, String& response, int& code) {
   return code > 0;
 }
 
-bool pollRecording() {
-  String url = baseUrl + "/api/device/recordings/" + pendingId;
-  const unsigned long deadline = millis() + POLL_TIMEOUT_MS;
-  while (millis() < deadline) {
-    const unsigned long waitUntil = millis() + POLL_INTERVAL_MS;
-    while (millis() < waitUntil) {
-      slowBlinkTick();
-      delay(100);
-    }
-    String payload;
-    int code = 0;
-    if (!httpGet(url, payload, code) || code != 200) {
-      Serial.print("poll: HTTP ");
-      Serial.println(code);
-      if (code == 401 || code == 404) {
-        Serial.println("poll: device token or recording not found");
-        pendingId = "";
-        return false;
-      }
-      continue;
-    }
-    String status = jsonStringField(payload, "status");
-    if (status == "completed") {
-      Serial.print("completed: thread=");
-      Serial.println(jsonStringField(payload, "threadId"));
-      return true;
-    }
-    if (status == "failed") {
-      Serial.print("failed: ");
-      Serial.println(jsonStringField(payload, "errorCode"));
-      // 服务端已经给了终态：下次重试重新上传，而不是继续查这一条。
-      pendingId = "";
-      return false;
-    }
-    Serial.println("poll: transcribing");
-  }
-  Serial.println("poll: timed out");
-  // 超时只说明还没拿到终态；保留 id，重试时继续查同一场，避免重复建会。
-  return false;
-}
-
 bool uploadRecording() {
-  pendingId = "";
   String head = String("--") + BOUNDARY +
                 "\r\nContent-Disposition: form-data; name=\"durationMs\"\r\n\r\n" +
                 String(FIXTURE_DURATION_MS) + "\r\n--" + BOUNDARY +
@@ -315,26 +270,24 @@ bool uploadRecording() {
     Serial.println(response);
     return false;
   }
-  pendingId = jsonStringField(response, "id");
-  if (pendingId.length() == 0) {
+  const String id = jsonStringField(response, "id");
+  if (id.length() == 0) {
     Serial.println("upload: response has no id");
     return false;
   }
   Serial.print("upload: id=");
-  Serial.println(pendingId);
+  Serial.println(id);
   return true;
 }
 
+// 设备只负责把录音交到服务端：拿到 202 就结束，不跟踪后续转写。
 bool sendRecording() {
-  // body 在 uploadRecording 返回后释放，轮询时不再占着 90 KB 的音频缓冲。
-  if (!uploadRecording()) return false;
-  return pollRecording();
+  return uploadRecording();
 }
 
 void finishAttempt(bool ok) {
   if (ok) {
     hasPending = false;
-    pendingId = "";
     state = IDLE;
     ledOff();
     Serial.println("state: idle");
@@ -365,18 +318,12 @@ void retryPending() {
   if (!hasPending) return;
   state = UPLOADING;
   digitalWrite(LED_PIN, HIGH);
-  if (pendingId.length() > 0) {
-    Serial.println("retry: polling same recording");
-    finishAttempt(pollRecording());
-  } else {
-    Serial.println("retry: uploading again");
-    finishAttempt(sendRecording());
-  }
+  Serial.println("retry: uploading again");
+  finishAttempt(sendRecording());
 }
 
 void discardPending() {
   hasPending = false;
-  pendingId = "";
   state = IDLE;
   ledOff();
   Serial.println("discard: pending recording dropped");
