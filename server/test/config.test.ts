@@ -6,10 +6,34 @@ import { loadConfig } from '../src/config';
 
 const dirs: string[] = [];
 
+// 宿主环境（例如 `source scripts/env.sh` 导出的 PORT）会覆盖临时 .env，测试前统一清掉。
+const CONFIG_ENV_KEYS = [
+  'JWT_SECRET',
+  'JWT_EXPIRES_IN',
+  'PORT',
+  'DAILY_LIMIT',
+  'DATABASE_PATH',
+  'QUOTA_TIMEZONE',
+  'LOG_FORMAT',
+  'LOG_LEVEL',
+];
+
 function tempDir(): string {
   const dir = mkdtempSync(path.join(tmpdir(), 'nota-config-'));
   dirs.push(dir);
   return dir;
+}
+
+/** 清掉宿主环境里同名变量，返回恢复函数。 */
+function clearConfigEnv(): () => void {
+  const saved = CONFIG_ENV_KEYS.map((key) => [key, process.env[key]] as const);
+  for (const key of CONFIG_ENV_KEYS) delete process.env[key];
+  return () => {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
 }
 
 afterEach(() => {
@@ -45,25 +69,30 @@ describe('场景：配置 · JWT_SECRET 必填', () => {
   });
 
   it('从仓库根 .env 读取配置，环境变量优先', () => {
-    // given：临时仓库根的 .env
-    const dir = tempDir();
-    writeFileSync(
-      path.join(dir, '.env'),
-      ['JWT_SECRET=from-file', 'PORT=9090', 'DAILY_LIMIT=3', 'DATABASE_PATH=./db/nota.db'].join('\n'),
-    );
+    // given：临时仓库根的 .env；清掉宿主环境，避免 PORT 之类的导出值覆盖文件
+    const restore = clearConfigEnv();
+    try {
+      const dir = tempDir();
+      writeFileSync(
+        path.join(dir, '.env'),
+        ['JWT_SECRET=from-file', 'PORT=9090', 'DAILY_LIMIT=3', 'DATABASE_PATH=./db/nota.db'].join('\n'),
+      );
 
-    // when：没有显式 env 时读文件
-    const fromFile = loadConfig({ root: dir });
-    // when：显式 env 覆盖文件
-    const overridden = loadConfig({ root: dir, env: { JWT_SECRET: 'from-env', PORT: '7070' } });
+      // when：没有显式 env 时读文件
+      const fromFile = loadConfig({ root: dir });
+      // when：显式 env 覆盖文件
+      const overridden = loadConfig({ root: dir, env: { JWT_SECRET: 'from-env', PORT: '7070' } });
 
-    // then
-    expect(fromFile.jwtSecret).toBe('from-file');
-    expect(fromFile.port).toBe(9090);
-    expect(fromFile.dailyLimit).toBe(3);
-    expect(fromFile.databasePath).toBe(path.join(dir, 'db/nota.db'));
-    expect(overridden.jwtSecret).toBe('from-env');
-    expect(overridden.port).toBe(7070);
+      // then
+      expect(fromFile.jwtSecret).toBe('from-file');
+      expect(fromFile.port).toBe(9090);
+      expect(fromFile.dailyLimit).toBe(3);
+      expect(fromFile.databasePath).toBe(path.join(dir, 'db/nota.db'));
+      expect(overridden.jwtSecret).toBe('from-env');
+      expect(overridden.port).toBe(7070);
+    } finally {
+      restore();
+    }
   });
 
   it('非法端口、每日额度、时区或 JWT 有效期抛错', () => {
