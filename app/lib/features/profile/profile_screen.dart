@@ -213,7 +213,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (usage.hasError) return '额度加载失败';
     final value = usage.value;
     if (value == null) return '额度加载中…';
-    if (value.unlimited) return '不限次';
+    // 不限次也要看到今天到底用了几次，否则额度区永远是一句没有信息量的话。
+    if (value.unlimited) return '不限次 · 今日已用 ${value.used} 次';
     return '${value.used} / ${value.limit}';
   }
 }

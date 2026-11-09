@@ -54,7 +54,7 @@ void main() {
       detail: ThreadDetail(thread: daily, messages: const []),
     );
     api.usage = Usage(
-      used: 0,
+      used: 7,
       limit: 10,
       unlimited: true,
       date: '2026-11-08',
@@ -93,7 +93,8 @@ void main() {
     // then：账号页显示邮箱、会员和额度
     expect(find.text('vip1@nota.com'), findsOneWidget);
     expect(find.text('VIP · 不限次'), findsOneWidget);
-    expect(find.byKey(const ValueKey('profile-quota')), findsOneWidget);
+    // 不限次也要显示今天用了几次
+    await pumpUntil(tester, find.text('不限次 · 今日已用 7 次'));
   });
 
   testWidgets('场景：我的 · Free 用户显示今日已用次数', (tester) async {
