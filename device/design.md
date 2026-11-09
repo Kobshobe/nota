@@ -34,7 +34,7 @@
 
 ## 身份与归属
 
-- `npm --prefix server run seed:device` 创建演示用户与一台设备；token 明文只打印一次，数据库只存 SHA-256。
+- `npm --prefix server run seed:device` 创建或复用 `.env` 里 `SEED_DEVICE_EMAIL` 指定的账号，并给它绑一台设备；token 明文只打印一次，数据库只存 SHA-256。
 - 设备请求带 `Authorization: Bearer <device-token>`；只能读写自己创建的录音，跨设备访问返回 404。
 - 设备预绑定一个用户；会议出现在该用户的主对话时间线，一场会议扣 1 次额度，失败不扣、重试不重复扣。
 

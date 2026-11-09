@@ -127,7 +127,7 @@ function parseInteger(raw: string | undefined, fallback: number, name: string): 
   return value;
 }
 
-function readEnvFile(filePath: string): Record<string, string> {
+export function readEnvFile(filePath: string): Record<string, string> {
   if (!existsSync(filePath)) return {};
   const values: Record<string, string> = {};
   for (const line of readFileSync(filePath, 'utf8').split('\n')) {

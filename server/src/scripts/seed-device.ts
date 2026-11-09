@@ -1,11 +1,18 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import { and, eq, isNull } from 'drizzle-orm';
 import { normalizeEmail } from '../auth';
-import { loadConfig } from '../config';
+import { loadConfig, readEnvFile, repoRoot } from '../config';
 import { createDb, migrateDb } from '../db';
 import { devices, users } from '../db/schema';
 import { createDeviceRecord } from '../devices';
 import { hashPassword } from '../lib/password';
+
+function hasArg(name: string): boolean {
+  return process.argv
+    .slice(2)
+    .some((arg) => arg === `--${name}` || arg.startsWith(`--${name}=`));
+}
 
 function readArg(name: string, fallback: string): string {
   const args = process.argv.slice(2);
@@ -24,13 +31,18 @@ const config = loadConfig();
 const { db, sqlite } = createDb(config.databasePath);
 migrateDb(db);
 
-const email = normalizeEmail(readArg('email', 'demo@nota.app'));
+const envFile = readEnvFile(path.join(repoRoot, '.env'));
+const email = normalizeEmail(
+  readArg('email', envFile.SEED_DEVICE_EMAIL?.trim() || 'demo@nota.app'),
+);
 const password = readArg('password', 'nota-demo-123');
+const passwordGiven = hasArg('password');
 const name = readArg('name', 'Wokwi ESP32');
 const now = new Date();
 const timestamp = now.toISOString();
 
 let user = db.select().from(users).where(eq(users.email, email)).get();
+const created = !user;
 if (!user) {
   user = {
     id: randomUUID(),
@@ -40,8 +52,8 @@ if (!user) {
     updatedAt: timestamp,
   };
   db.insert(users).values(user).run();
-} else {
-  // seed 是可重复执行的开发工具：把演示账号的密码重置成传入值，保证 runbook 可用。
+} else if (passwordGiven) {
+  // 已有账号只在显式传 --password 时改密码，避免换绑设备时动到别人的登录密码。
   db.update(users)
     .set({ passwordHash: hashPassword(password), updatedAt: timestamp })
     .where(eq(users.id, user.id))
@@ -59,6 +71,6 @@ sqlite.close();
 
 console.log('seed ok');
 console.log(`email=${email}`);
-console.log(`password=${password}`);
+console.log(`password=${created || passwordGiven ? password : '(unchanged)'}`);
 console.log(`deviceId=${device.id}`);
 console.log(`deviceToken=${token}`);

@@ -14,11 +14,13 @@
 
 ### 1. 造一台演示设备
 
+设备绑定 `.env` 里的 `SEED_DEVICE_EMAIL`（默认 `demo@nota.app`）；改成别的邮箱再重跑就换绑到那个账号，`--email` 可以临时覆盖。
+
 ```sh
 npm --prefix server run seed:device
 ```
 
-输出里的 `email` / `password` 用来登录 App，`deviceToken` 下一步要用；每次执行都会新建一台设备并打印新 token，并把 demo 账号的密码重置成传入值。
+输出里的 `email` / `password` 用来登录 App，`deviceToken` 下一步要用。每次执行都会新建一台设备并打印新 token；账号不存在时按 `--password`（默认 `nota-demo-123`）创建，已存在时密码不变，要重置就显式传 `--password`。
 
 ### 2. 起服务并登录 App
 
