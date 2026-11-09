@@ -27,6 +27,19 @@ void main() {
     expect(latestDeviceNotice([_message('u1', MessageRole.user)]), isNull);
   });
 
+  test('system 消息能从契约字段解析出会议引用', () {
+    final message = ChatMessage.fromJson({
+      'id': 's1',
+      'role': 'system',
+      'content': '设备录音已整理成会议：周会',
+      'payload': {'meetingThreadId': 't1'},
+      'createdAt': '2026-11-09T05:30:00.000Z',
+    });
+
+    expect(message.role, MessageRole.system);
+    expect(message.payload?.meetingThreadId, 't1');
+  });
+
   test('只在消息 id 变化时算新通知', () {
     final notice = _message('s1', MessageRole.system);
 

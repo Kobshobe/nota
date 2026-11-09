@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
 import '../../shared/format.dart';
@@ -31,74 +30,11 @@ class MessageBubble extends StatelessWidget {
     if (message.role == MessageRole.user) {
       return _UserBubble(message: message);
     }
-    if (message.role == MessageRole.system) {
-      return _SystemNotice(message: message);
-    }
     return _AssistantBubble(
       message: message,
       toolCalls: toolCalls,
       createdActions: createdActions,
       onAddAction: onAddAction,
-    );
-  }
-}
-
-/// 服务端写入的通知（例如设备会议整理完成）：居中一条，可跳到会议。
-class _SystemNotice extends StatelessWidget {
-  const _SystemNotice({required this.message});
-
-  final ChatMessage message;
-
-  @override
-  Widget build(BuildContext context) {
-    final meetingThreadId = message.payload?.meetingThreadId;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 520),
-          padding: const EdgeInsets.only(left: 14, right: 4, top: 2, bottom: 2),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.notifications_none,
-                size: 16,
-                color: AppColors.muted,
-              ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    message.content,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.4,
-                      color: AppColors.ink,
-                    ),
-                  ),
-                ),
-              ),
-              if (meetingThreadId != null && meetingThreadId.isNotEmpty)
-                TextButton(
-                  onPressed: () => context.push('/chat/$meetingThreadId'),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text('查看会议', style: TextStyle(fontSize: 13)),
-                ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

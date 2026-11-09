@@ -43,3 +43,21 @@ List<TimelineEntry> buildTimeline({
   }
   return entries;
 }
+
+
+/// 时间线里不单独显示 system 通知：它指向的会议已经以卡片出现。
+List<ChatMessage> timelineMessages(List<ChatMessage> messages) {
+  return messages
+      .where((message) => message.role != MessageRole.system)
+      .toList();
+}
+
+/// 设备录音创建的会议：system 通知里的 meetingThreadId 就是来源标记。
+Set<String> deviceMeetingIds(List<ChatMessage> messages) {
+  return {
+    for (final message in messages)
+      if (message.role == MessageRole.system &&
+          message.payload?.meetingThreadId != null)
+        message.payload!.meetingThreadId!,
+  };
+}

@@ -11,6 +11,16 @@ ChatMessage message(String id, String content, DateTime at) {
   );
 }
 
+ChatMessage deviceNotice(String id, String meetingThreadId, DateTime at) {
+  return ChatMessage(
+    id: id,
+    role: MessageRole.system,
+    content: '设备录音已整理成会议：周会',
+    createdAt: at,
+    payload: MessagePayload(meetingThreadId: meetingThreadId),
+  );
+}
+
 NotaThread meeting(String id, String title, DateTime at) {
   return NotaThread(
     id: id,
@@ -68,5 +78,23 @@ void main() {
 
     expect(entries.first.message?.content, '同一分钟');
     expect(entries.last.meeting?.title, '周会');
+  });
+
+  test('场景：时间线 · system 通知不单独占一行', () {
+    final at = DateTime.utc(2026, 11, 9, 6);
+    final messages = [
+      message('u1', '你好', at),
+      deviceNotice('s1', 'm1', at),
+    ];
+
+    expect(timelineMessages(messages).map((item) => item.id), ['u1']);
+    expect(deviceMeetingIds(messages), {'m1'});
+  });
+
+  test('场景：时间线 · App 自己录的会议没有被标记成设备录音', () {
+    final at = DateTime.utc(2026, 11, 9, 6);
+    final messages = [message('u1', '你好', at)];
+
+    expect(deviceMeetingIds(messages), isEmpty);
   });
 }

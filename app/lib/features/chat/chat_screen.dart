@@ -210,7 +210,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final meetings = state.thread.kind == ThreadKind.daily
         ? threads.where((thread) => thread.kind == ThreadKind.meeting).toList()
         : const <NotaThread>[];
-    final entries = buildTimeline(messages: state.messages, meetings: meetings);
+    final entries = buildTimeline(
+      messages: timelineMessages(state.messages),
+      meetings: meetings,
+    );
+    final deviceMeetings = deviceMeetingIds(state.messages);
 
     return Column(
       children: [
@@ -240,7 +244,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         final entry = entries[index];
                         final meeting = entry.meeting;
                         if (meeting != null) {
-                          return _MeetingTile(thread: meeting);
+                          return _MeetingTile(
+                            thread: meeting,
+                            fromDevice: deviceMeetings.contains(meeting.id),
+                          );
                         }
                         final message = entry.message!;
                         return MessageBubble(
@@ -366,9 +373,10 @@ class _ErrorBanner extends StatelessWidget {
 
 /// 日常对话里代表一场会议：点进去继续那场会议。
 class _MeetingTile extends StatelessWidget {
-  const _MeetingTile({required this.thread});
+  const _MeetingTile({required this.thread, this.fromDevice = false});
 
   final NotaThread thread;
+  final bool fromDevice;
 
   @override
   Widget build(BuildContext context) {
@@ -396,8 +404,8 @@ class _MeetingTile extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.groups_outlined,
+                    Icon(
+                      fromDevice ? Icons.mic_none : Icons.groups_outlined,
                       size: 18,
                       color: AppColors.sage,
                     ),
@@ -407,8 +415,8 @@ class _MeetingTile extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            '会议',
+                          Text(
+                            fromDevice ? '设备录音' : '会议',
                             style: TextStyle(
                               fontSize: 11,
                               color: AppColors.muted,
