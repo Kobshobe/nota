@@ -40,6 +40,17 @@ cloudflared tunnel --url http://127.0.0.1:8080
 
 记下输出里的 `https://<随机>.trycloudflare.com`。隧道每次启动域名都会变。
 
+如果域名已经托管在 Cloudflare，可以建一条命名隧道，地址固定、模拟器重启也不用重粘：
+
+```sh
+cloudflared tunnel login
+cloudflared tunnel create nota-device
+cloudflared tunnel route dns nota-device nota.<你的域名>
+cloudflared tunnel run nota-device
+```
+
+`~/.cloudflared/config.yml` 的 `ingress` 指向 `http://127.0.0.1:8080`。模拟器里用 `http://nota.<你的域名>`：ESP32 走 HTTPS 时和 Cloudflare 边缘的握手会卡住，明文 HTTP 正常；token 会明文过公网，只用于演示。
+
 ### 4. 在 Wokwi 里搭电路
 
 1. 新建一个 ESP32 项目，板型选 **ESP32 DevKit C V4**。
