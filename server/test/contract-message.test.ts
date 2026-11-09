@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   call,
+  finishOnly,
   createTestApp,
   dailyThreadId,
-  finishOnly,
   finishWith,
   login,
   sendMessage,

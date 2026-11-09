@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.8.0
+  version: 0.9.0
   description: |
     Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
@@ -167,7 +167,21 @@ paths:
       tags: [recordings]
       operationId: uploadRecording
       summary: 上传一段会议录音并开始异步转写
-      description: 只有转写成功、写入第一条消息时才会创建会议；在此之前不存在任何 thread。
+      description: |
+        只有转写成功、写入第一条消息时才会创建会议；在此之前不存在任何 thread。
+        上传本身不消耗额度，整理转写结果时才消耗一次。
+
+        带 `Idempotency-Key` 时，同一用户用同一个键再次上传不会新建录音，直接返回既有记录及其当前状态。
+        这使网络重传不会产生第二段录音，也不会因此重复扣费。缺少该请求头时每次请求都新建一段录音。
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: 客户端为这次上传生成的一次性标识；重传必须复用同一个值
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 64
       requestBody:
         required: true
         content:
@@ -188,7 +202,7 @@ paths:
                   description: 客户端测得的录音时长，用于展示与排查
       responses:
         '202':
-          description: 已接收，转写中
+          description: 已接收，转写中；同一 `Idempotency-Key` 重复上传时也返回 202，body 为既有录音的当前状态
           content:
             application/json:
               schema:
@@ -471,6 +485,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Usage'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /api/usage/last-anomaly:
+    get:
+      tags: [usage]
+      operationId: getLastChargeAnomaly
+      summary: 查最近一条有问题的扣费（诊断用）
+      description: |
+        在额度账本里找当前用户最近一条没有计费的记录：额度仍在占用中，或已经释放。
+        只返回最新的一条，不写任何数据。
+        没有这类记录时 `state` 为 `none`。
+      responses:
+        '200':
+          description: 最近一条可疑扣费
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChargeCheck'
         '401':
           $ref: '#/components/responses/Unauthorized'
 components:
@@ -852,6 +884,18 @@ components:
         createdAt:
           type: string
           format: date-time
+    ChargeCheck:
+      type: object
+      additionalProperties: false
+      required: [state, message]
+      properties:
+        state:
+          type: string
+          enum: [none, reserved, released]
+          description: 最近一条可疑扣费的状态；none 表示没有
+        message:
+          type: string
+          description: 可以直接展示给用户的一句话
     Usage:
       type: object
       additionalProperties: false

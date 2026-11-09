@@ -15,7 +15,7 @@ Demo 版工程规范：结构清楚、代码少、测试场景一眼看懂。产
 - 除 `/api/auth/login` 和 `/api/health`，所有接口要求 `Authorization: Bearer <JWT>`。
 - 响应带 `X-Request-Id`；错误体带 `requestId`。
 - 单次文字输入上限 20,000 字符；超限返回 400 `INVALID_INPUT`。
-- 写消息带 `clientMessageId`；同键重试返回原结果，不重复创建或扣额度。
+- 写消息带 `clientMessageId`，上传录音带 `Idempotency-Key` 头；同键重试返回原结果，不重复创建或扣额度。
 - 按钮确认候选事项带 `sourceMessageId` 与 `candidateIndex`，两者必须成对；`GET /threads/{id}` 的 `Message.toolCalls` 回放工具轨迹。
 - 创建 `reminder` 必须带 `dueAt`；`PATCH /items/{id}` 的 `dueAt: null` 只能清空待办时间，提醒不能清空，省略表示不变。
 - 列表用 `limit` 控制数量，不做游标分页。
@@ -99,7 +99,7 @@ lib/
 - 5xx / 网络 / 超时 → 提示可重试。
 - 400 / 404 → 不弹全局错误，交给所在 feature。
 
-原则：拦截器做分类和全局副作用，不吞掉所有错误；页面级字段错误由 controller 处理。UI 不直接接触 `DioException`。`POST /messages` 不自动重试；重试复用同一个 `clientMessageId`。
+原则：拦截器做分类和全局副作用，不吞错误；页面级字段错误由 controller 处理；UI 不碰 `DioException`。`POST /messages` 不自动重试，重试复用同一个 `clientMessageId`。
 
 ### 4.3 通用组件
 
@@ -110,7 +110,7 @@ lib/
 - `AppButton`、`AppTextField`、`ConfirmDialog`、`AppSnackBar`。
 - `SectionCard`、`ItemCard`、`MessageBubble`、`ToolCallTile`。
 
-组件只做展示；业务逻辑在 controller；不为了封装多一层。
+组件只做展示，逻辑在 controller，不多包一层。
 
 ## 5. 后端
 
@@ -131,9 +131,7 @@ server/src/
   items.ts      事项增删改完成
   usage.ts      额度
   recordings.ts 录音上传/状态/重试与转写任务
-  asr/audio.ts       容器校验与 webm→m4a 转码（需要 ffmpeg）
-  asr/minimax.ts     MiniMax 转写适配
-  asr/transcript.ts  逐句转写合并成说话人全文
+  asr/               容器校验与转码（ffmpeg）、MiniMax 适配、逐句合并
   agent/
     run.ts      pi-agent-core 组装、事件
     tools.ts    5 个工具 + finish
@@ -141,66 +139,57 @@ server/src/
     prompt.ts   system prompt
     staging.ts  写操作暂存/提交
 server/test/
-  auth.test.ts
-  quota.test.ts
-  threads.test.ts
-  items.test.ts
-  agent.test.ts
-  recordings.test.ts
-  asr.test.ts
-  validation.test.ts
-  config.test.ts
-  prompt.test.ts
-  agent-log.test.ts
-  tool-log.test.ts
-  contract-message.test.ts
+  auth、quota、quota-ledger、threads、items、agent、recordings、asr、validation、
+  config、prompt、agent-log、tool-log、contract-message（均为 `.test.ts`）
 ```
 
-- 一个 feature 一个文件，路由、业务、查询就近；不建 `repositories/`、`services/` 分层。
+- 一个 feature 一个文件，路由、业务、查询就近；不建 `repositories/`、`services/`。
 - 不做 DI 容器、接口抽象；文件尽量 <200 行。
-- 错误统一用 `lib/errors.ts` 的 `AppError`；JWT 在 `lib/jwt.ts`。
 
 ### 5.2 Drizzle
 
-- `drizzle-orm` + `better-sqlite3`；`drizzle-kit` 生成迁移。
-- `server/drizzle.config.ts` 指向 `src/db/schema.ts`；迁移放 `server/drizzle/`。
+- `drizzle-orm` + `better-sqlite3`，`drizzle-kit` 生成迁移。
+- `drizzle.config.ts` 指向 `src/db/schema.ts`；迁移放 `server/drizzle/`。
 - `db/schema.ts` 定义表；`db.ts` 只导出连接；feature 里直接 `db.select/insert/update/delete`。
-- 关联查询直接写 Drizzle 表达式，不额外包 repository；复杂 SQL 可以在 feature 内用 `sql` 模板。
+- 查询直接写 Drizzle 表达式，不包 repository；复杂 SQL 用 `sql` 模板。
 - 时间存 ISO UTC；ID 用 `crypto.randomUUID()`；额度日界 Asia/Shanghai。
-- 多写操作放 `db.transaction`；staging/finish 也走事务。
+- 额度走 `reserve` → `committed` / `released` 两阶段；每次变化写一行 `usage_events`（`idempotency_key` 唯一）。`usage_daily.used` 是其物化，同事务更新且相等；清扫按 TTL 释放超期 `reserved`。
+- `make reconcile` 校验 `used` 与账本未释放行数、与当日 assistant 条数都相等；后者用来抓"超时释放但后来跑完了"这种少收。
+- 多写操作放 `db.transaction`，staging/finish 也走事务。
 
 ### 5.3 错误处理
 
 - 领域层抛 `AppError`（code / status / message / details）。
-- 全局 error handler 统一转成第 3 节错误体；Zod 失败 → `INVALID_INPUT`；JWT 失败 → `UNAUTHORIZED`；未知 → `INTERNAL`。
+- 全局 handler 统一转成第 3 节错误体；Zod → `INVALID_INPUT`，JWT → `UNAUTHORIZED`，未知 → `INTERNAL`。
 - pino 记录 requestId、code、status（`LOG_FORMAT=json` 可见）；不记录密码、token、完整会议内容。
 
 ### 5.4 日志
 
-- 每次 Agent 运行打运行开始/结束和每个工具一行中文摘要：`▶ create_item 标题=「买牛奶」 类型=待办`、`✔ create_item 已暂存 new_1（待办） 3ms`；参数和结果不序列化成 JSON，换行压成一行。
-- 终端默认 pretty（隐藏 `tool`/`durationMs`/`isError`/`reqId`）；`LOG_FORMAT=json` 输出 pino 原始 JSON 且保留这些字段，`LOG_LEVEL` 控级别，非法值启动即失败。
+- 每次运行打开始/结束，每个工具一行摘要（`▶ create_item 标题=「买牛奶」`、`✔ create_item 已暂存 new_1 3ms`）；不序列化 JSON，换行压成一行。
+- 终端默认 pretty，隐藏 `tool`/`durationMs`/`isError`/`reqId`；`LOG_FORMAT=json` 保留；`LOG_LEVEL` 控级别，非法值启动即失败。
 
 ### 5.5 Agent
 
 - 用 `pi-agent-core` + `pi-ai` + `pi-schema`，不用 `pi-coding-agent`。
 - 每次请求新建 `Agent`，从 SQLite 恢复 messages；`sessionId` 用 thread id。
-- 工具：`create_item`、`update_item`、`delete_item`、`complete_item`、`search_items`、`finish`；写操作 `executionMode: "sequential"`。
-- `finish` 校验并暂存 summary / keyPoints / actions / reply；assistant、payload、tool_calls、事项与幂等响应在同一事务里提交；没 finish、事务失败或报错则回滚并退额度。
-- 订阅 `tool_execution_end` 收集工具轨迹；运行结束后把 assistant 消息、payload、tool_calls 与幂等响一并落库；v1 同步，P1 再 SSE。
+- 工具：`create_item`、`update_item`、`delete_item`、`complete_item`、`search_items`、`finish`，写操作 `sequential`。
+- `finish` 校验并暂存 summary / keyPoints / actions / reply；assistant、payload、tool_calls、事项与幂等响在同一事务提交；没 finish、事务失败或报错则回滚退额度。
+- 一轮运行算一次额度；模型往返、工具调用与有没有产出都不影响计数。失败退回，崩在中途由清扫退回。
+- 订阅 `tool_execution_end` 收集轨迹；结束把 assistant、payload、tool_calls 与幂等响落库；v1 同步，P1 再 SSE。
 - DeepSeek 用 `deepseekProvider()` + `deepseek-flash`；`thinkingLevel` 先 `low`。
 
 ### 5.6 设备（模拟器）
 
 - 设备端在 `device/`：Arduino 固件、Wokwi 电路、运行手册。
 - 设备身份：`devices` 存 token hash，明文只在 seed 输出；设备用 Bearer。
-- 设备音频用内嵌会议 MP3，I2S 不在模拟范围；`setInsecure()` 只用于本地隧道；链路是 202 即结束 → ASR → 建会 → Agent 纪要，无音频下行。
+- 设备音频用内嵌 MP3，I2S 不在范围；`setInsecure()` 只用于本地隧道；链路 202 → ASR → 建会 → Agent 纪要，无音频下行。
 - 固件手动在 Wokwi 验收；服务端测试覆盖主路径与失败路径。
 
 ## 6. 测试
 
 ### 6.1 原则
 
-不强制红-绿-重构的仪式；测试可以在实现前、中、后写。要求是测试名和结构能直接看出应用场景和意图。
+不强制红-绿-重构；测试可在实现前、中、后写，名字和结构要能看出场景与意图。
 
 - 一个测试一个行为；断言可观察结果，不测私有实现。
 - 用公共 seam：HTTP 路由、service、agent；不 mock 内部细节。
@@ -216,7 +205,7 @@ server/test/
 
 - Vitest；临时 SQLite；每个测试独立库或事务。
 - LLM 用 `pi-ai` 的 `fauxProvider` 或 fake `streamFn`。
-- 覆盖：登录/注册、JWT 过期、额度并发/幂等、thread 归属、工具参数、finish/staging 回滚、错误码。
+- 覆盖：登录、JWT、额度并发/幂等、thread 归属、工具参数、staging 回滚、错误码。
 - 契约测试：`scripts/check-contract.mjs` 起真实服务核对状态码和字段。
 
 ### 6.4 客户端

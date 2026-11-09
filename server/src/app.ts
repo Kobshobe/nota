@@ -32,6 +32,7 @@ import { registerMessageRoutes } from './messages';
 import { recoverRecordings, registerRecordingRoutes } from './recordings';
 import { registerDeviceRecordingRoutes } from './device-recordings';
 import { registerUsageRoutes } from './usage';
+import { reapExpiredReservations } from './quota';
 import './types';
 
 export interface BuildAppOptions {
@@ -98,7 +99,9 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       `${request.method} ${request.url} → ${reply.statusCode} ${Math.round(reply.elapsedTime)}ms`,
     );
   });
+  let reapTimer: NodeJS.Timeout | undefined;
   app.addHook('onClose', async () => {
+    if (reapTimer) clearInterval(reapTimer);
     sqlite.close();
   });
 
@@ -167,6 +170,20 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerRecordingRoutes(app);
   registerDeviceRecordingRoutes(app);
   await recoverRecordings(app);
+
+  // 进程崩在运行中途时，只有这条路径能把占用中的额度退回去。
+  reapExpiredReservations(app.db, app.now(), config.quotaReserveTtlMinutes);
+  reapTimer = setInterval(() => {
+    try {
+      reapExpiredReservations(app.db, app.now(), config.quotaReserveTtlMinutes);
+    } catch (error) {
+      app.log.error(
+        { errorName: error instanceof Error ? error.name : 'UnknownError' },
+        'quota reservation sweep failed',
+      );
+    }
+  }, config.quotaReserveTtlMinutes * 60_000);
+  reapTimer.unref();
 
   return app;
 }

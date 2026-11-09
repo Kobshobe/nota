@@ -25,6 +25,9 @@ export interface AppConfig {
   jwtExpiresIn: string;
   dailyLimit: number;
   quotaTimezone: string;
+  quotaReserveTtlMinutes: number;
+  /** 演示开关：消息以它开头时中断本次运行，留下未结账的占用。未配置时没有这个行为。 */
+  demoStuckPrefix?: string;
   deepseekApiKey?: string;
   deepseekBaseUrl: string;
   deepseekModel: string;
@@ -61,6 +64,12 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
   if (!/^\d+(ms|s|m|h|d)$/.test(jwtExpiresIn)) {
     throw new Error('JWT_EXPIRES_IN must look like 7d, 12h, or 30m.');
   }
+  const quotaReserveTtlMinutes = parseInteger(
+    env.QUOTA_RESERVE_TTL_MINUTES,
+    2,
+    'QUOTA_RESERVE_TTL_MINUTES',
+  );
+  const demoStuckPrefix = env.DEMO_STUCK_PREFIX?.trim() || undefined;
   const quotaTimezone = env.QUOTA_TIMEZONE?.trim() || 'Asia/Shanghai';
   try {
     new Intl.DateTimeFormat('en-US', { timeZone: quotaTimezone }).format();
@@ -102,6 +111,8 @@ export function loadConfig(options: LoadConfigOptions = {}): AppConfig {
     jwtExpiresIn,
     dailyLimit,
     quotaTimezone,
+    quotaReserveTtlMinutes,
+    demoStuckPrefix,
     deepseekApiKey: env.DEEPSEEK_API_KEY?.trim() || undefined,
     deepseekBaseUrl: env.DEEPSEEK_BASE_URL?.trim() || 'https://api.deepseek.com',
     deepseekModel: env.DEEPSEEK_MODEL?.trim() || 'deepseek-flash',

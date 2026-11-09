@@ -1,6 +1,6 @@
 # Nota
 
-AI 语音便签 / 会议助手 MVP：一个入口，接住从一句提醒到一场会议；短的直接办，长的先出纪要再确认事项。日常走文字输入，会议走录音转写；客户端是 Flutter Web + iOS。
+AI 语音便签 / 会议助手 MVP：一个入口接住从一句提醒到一场会议；短的直接办，长的先出纪要再确认事项。日常走文字，会议走录音转写；客户端 Flutter Web + iOS。
 
 ## 文档
 
@@ -9,13 +9,13 @@ AI 语音便签 / 会议助手 MVP：一个入口，接住从一句提醒到一�
 - 工程约定：[`docs/engineering.md`](docs/engineering.md)
 - 接口契约：[`contract/openapi.yaml`](contract/openapi.yaml)
 - 设备模拟器：[`device/README.md`](device/README.md)
-- 演示视频（45s）：[`demo/nota-demo.mp4`](demo/nota-demo.mp4)
+- 演示视频 45s：[`demo/nota-demo.mp4`](demo/nota-demo.mp4)
 
 ## 架构
 
 - Flutter（Riverpod + Dio）→ Fastify API → SQLite（Drizzle）；唯一耦合点是 OpenAPI 契约。
-- Agent 用 `pi-agent-core` + `pi-ai` + `deepseek-flash`，工具写操作先 staging，`finish` 在一个事务里提交。
-- 无状态 JWT；Free 每天 10 次、VIP 不限次；`POST /messages` 同步处理，SSE 是 P1。
+- Agent 用 `pi-agent-core` + `pi-ai` + `deepseek-flash`，写操作先 staging，`finish` 在一个事务里提交。
+- 无状态 JWT；Free 每天 10 轮、VIP 不限次，一轮 Agent 运行算一次，失败退回；`POST /messages` 同步，SSE 是 P1。
 
 ## 运行
 
@@ -32,7 +32,7 @@ flutter run -d chrome --dart-define=API_BASE_URL=http://127.0.0.1:8080
 # iOS 模拟器同理，换 -d "iPhone 17 Pro"
 ```
 
-数据库默认在 `data/nota.db`，已在 `.gitignore` 中。任何邮箱都能注册；邮箱含 `vip`（不区分大小写）即 VIP。
+数据库默认在 `data/nota.db`，已加入 `.gitignore`。任何邮箱可注册；邮箱含 `vip`（不区分大小写）即 VIP。
 
 ## 验收
 
@@ -42,8 +42,8 @@ make e2e                       # HTTP 冒烟（不调模型）
 E2E_MESSAGE=1 make e2e         # 再走一次真实 DeepSeek 消息
 ```
 
-额度证明：`server/test/quota.test.ts` 覆盖第 11 次 429、跨天重置、VIP 不限次、并发同 key 只扣一次。干净副本已用 `git archive` + `npm ci` + `flutter pub get` 验证启动和两端测试。
+额度：`quota.test.ts` 与 `quota-ledger.test.ts` 覆盖 429、跨天重置、VIP 不限次、同 key 并发只扣一次、一轮计一次。干净副本已用 `git archive` + `npm ci` + `flutter pub get` 验证启动和两端测试。
 
-演示顺序：事项页点悬浮按钮进主对话，说“提醒我两个小时后去游泳” → 点右上角会议按钮，录一段话并结束 → 等它整理成纪要 → 点选候选待办 → 回事项页修改 / 完成 / 删除。
+演示顺序：事项页点悬浮按钮进主对话，说“提醒我两个小时后去游泳” → 点右上角会议按钮录一段并结束 → 等纪要 → 点选候选待办 → 回事项页改 / 完成 / 删。
 
-v1 不做：实时上屏、Android、真实日历同步、订阅支付、多人协作、多端通知同步。
+v1 不做：实时上屏、Android、日历同步、订阅支付、多人协作、多端通知同步。

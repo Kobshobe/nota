@@ -47,12 +47,17 @@ async function upload(
   filename = 'meeting.m4a',
   bytes: Buffer = Buffer.from('fake-audio-bytes'),
   fields: Record<string, string> = { durationMs: '12000' },
+  idempotencyKey?: string,
 ) {
   const { payload, headers } = multipart(filename, bytes, fields);
   const response = await ctx.app.inject({
     method: 'POST',
     url: '/api/recordings',
-    headers: { ...headers, authorization: `Bearer ${token}` },
+    headers: {
+      ...headers,
+      authorization: `Bearer ${token}`,
+      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
+    },
     payload,
   });
   return {
@@ -212,6 +217,44 @@ describe('场景：会议录音 → 纪要', () => {
     expect(
       threads.body.threads.filter((thread: { kind: string }) => thread.kind === 'meeting'),
     ).toHaveLength(0);
+  });
+
+  it('同一 Idempotency-Key 重传只建一条录音，也只扣一次', async () => {
+    ctx = await createTestApp();
+    const auth = await login(ctx);
+    ctx.faux.setResponses([finishOnly({ reply: '已整理' })]);
+
+    const key = 'upload-key-0001';
+    const first = await upload(ctx, auth.token, 'meeting.m4a', Buffer.from('fake-audio-bytes'), { durationMs: '12000' }, key);
+    expect(first.status).toBe(202);
+
+    const done = await waitForRecording(ctx, auth.token, first.body.id);
+    expect(done.status).toBe('completed');
+
+    // 响应丢失后的重传：同一个 key，音频内容一样
+    const second = await upload(ctx, auth.token, 'meeting.m4a', Buffer.from('fake-audio-bytes'), { durationMs: '12000' }, key);
+    expect(second.status).toBe(202);
+    expect(second.body.id).toBe(first.body.id);
+
+    const rows = ctx.app.db.select().from(recordings).all();
+    expect(rows).toHaveLength(1);
+    const usage = await call(ctx, { method: 'GET', url: '/api/usage', token: auth.token });
+    expect(usage.body.used).toBe(1);
+  });
+
+  it('不带 Idempotency-Key 时保持每次新建一条录音', async () => {
+    ctx = await createTestApp();
+    const auth = await login(ctx);
+    ctx.faux.setResponses([finishOnly({ reply: '已整理' })]);
+
+    const first = await upload(ctx, auth.token);
+    const done = await waitForRecording(ctx, auth.token, first.body.id);
+    expect(done.status).toBe('completed');
+
+    const second = await upload(ctx, auth.token);
+    expect(second.status).toBe(202);
+    expect(second.body.id).not.toBe(first.body.id);
+    expect(ctx.app.db.select().from(recordings).all()).toHaveLength(2);
   });
 
   it('不支持的音频格式返回 415', async () => {

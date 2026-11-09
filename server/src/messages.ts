@@ -11,12 +11,12 @@ import {
   type ThreadRow,
   type UserRow,
 } from './db/schema';
+import type { Db } from './db';
 import type { MessagePayload, ToolName, ToolTrace } from './domain';
 import { internal, invalidInput } from './lib/errors';
 import { toItemDto, toMessageDto, type ItemDto, type MessageDto } from './lib/dto';
-import { dayInTimeZone } from './lib/time';
 import { DEFAULT_MEETING_TITLE, getOwnedThread } from './threads';
-import { chargeQuota, getUsage, refundQuota, type UsageDto } from './quota';
+import { getUsage, releaseQuota, reserveQuota, settleQuota, type UsageDto } from './quota';
 import { AgentRunError, runAgent } from './agent/run';
 import type { Staging } from './agent/staging';
 import { payloadToJson } from './agent/payload';
@@ -95,33 +95,28 @@ export async function sendMessageCore(
     .get();
 
   if (existingUserMessage) {
+    if (existingUserMessage.content !== content) {
+      throw invalidInput('clientMessageId was reused with different content');
+    }
     const stored = findStoredResponse(app, existingUserMessage.id);
     if (stored) return stored;
   }
 
+  const userMessageId = existingUserMessage?.id ?? randomUUID();
+  // 账本行先落地，额度不足在这里就抛 429，不会留下半条消息。
+  const reservation = reserveQuota(app.db, user, app.config, now, {
+    idempotencyKey: clientMessageId,
+    reason: 'message',
+    refId: userMessageId,
+  });
+  const eventId = reservation.event.id;
+
   let userMessage: MessageRow;
-  let chargedDay: string | undefined;
   if (existingUserMessage) {
-    if (existingUserMessage.content !== content) {
-      throw invalidInput('clientMessageId was reused with different content');
-    }
     userMessage = existingUserMessage;
-    const originalDay = dayInTimeZone(
-      new Date(existingUserMessage.createdAt),
-      app.config.quotaTimezone,
-    );
-    const currentDay = dayInTimeZone(now, app.config.quotaTimezone);
-    if (originalDay !== currentDay) {
-      refundQuota(app.db, user.id, originalDay, now);
-      chargedDay = chargeQuota(app.db, user, app.config, now).day;
-    } else {
-      chargedDay = originalDay;
-    }
   } else {
-    const charge = chargeQuota(app.db, user, app.config, now);
-    chargedDay = charge.day;
     userMessage = {
-      id: randomUUID(),
+      id: userMessageId,
       threadId: thread.id,
       role: 'user',
       content: content,
@@ -134,9 +129,29 @@ export async function sendMessageCore(
     try {
       app.db.insert(messages).values(userMessage).run();
     } catch (error) {
-      refundQuota(app.db, user.id, chargedDay, now);
+      const raced = app.db
+        .select()
+        .from(messages)
+        .where(and(eq(messages.threadId, thread.id), eq(messages.clientMessageId, clientMessageId)))
+        .get();
+      // 同一条消息被另一个进程抢先写入：账本行归它，这里不能释放。
+      if (raced) {
+        const stored = findStoredResponse(app, raced.id);
+        if (stored) return stored;
+        throw internal('Failed to persist message');
+      }
+      releaseQuota(app.db, eventId, 'failed', now);
       throw error;
     }
+  }
+
+
+  // 演示开关：留下一次未结账的占用，模拟请求在跑 Agent 期间被掐断。
+  // 不调用 fail()，所以额度不会当场退回，只能等清扫回收。
+  const stuckPrefix = app.config.demoStuckPrefix;
+  if (stuckPrefix && content.trimStart().startsWith(stuckPrefix)) {
+    log.warn({ requestId, threadId: thread.id }, 'demo: 模拟中断，额度保持占用');
+    throw internal('模拟中断：这次整理没有完成，额度保持占用');
   }
 
   const fail = async (message: string): Promise<never> => {
@@ -144,7 +159,7 @@ export async function sendMessageCore(
       .delete(messages)
       .where(or(eq(messages.id, userMessage.id), eq(messages.userMessageId, userMessage.id)))
       .run();
-    if (chargedDay) refundQuota(app.db, user.id, chargedDay, now);
+    releaseQuota(app.db, eventId, 'failed', now);
     throw internal(message);
   };
 
@@ -199,9 +214,10 @@ export async function sendMessageCore(
       assistantMessage,
       toolCalls: run.toolCalls,
       payload,
-      usage: getUsage(app.db, user, app.config, now),
+      resolveUsage: (tx) => getUsage(tx, user, app.config, now),
       staging: run.staging,
       now,
+      eventId,
     });
   } catch (error) {
     log.error(
@@ -237,6 +253,8 @@ function findStoredResponse(app: FastifyInstance, userMessageId: string): SendMe
   }
 }
 
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
 function persistRun(
   app: FastifyInstance,
   input: {
@@ -245,16 +263,21 @@ function persistRun(
     assistantMessage: MessageRow;
     toolCalls: ToolTrace[];
     payload: MessagePayload;
-    usage: UsageDto;
+    resolveUsage: (tx: Tx) => UsageDto;
     staging: Staging;
     now: Date;
+    eventId: string;
   },
 ): SendMessageResponse {
-  const { thread, userMessage, assistantMessage, toolCalls, payload, usage, staging, now } = input;
+  const { thread, userMessage, assistantMessage, toolCalls, payload, resolveUsage, staging, now, eventId } =
+    input;
   const timestamp = now.toISOString();
 
   const response = app.db.transaction((tx) => {
     const committed = staging.commitInTransaction(tx);
+    // 一轮就是一次：跑到这里说明本次运行成功了，占用转为计费。
+    settleQuota(tx, eventId, now);
+    const usage = resolveUsage(tx);
 
     const priorAssistants =
       tx

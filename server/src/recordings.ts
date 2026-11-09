@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq, lt, sql } from 'drizzle-orm';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ensureDailyThread, requireUser } from './auth';
 import {
   messages,
   recordings,
   threads,
+  usageEvents,
   users,
   type RecordingRow,
   type ThreadRow,
@@ -25,8 +26,7 @@ import { formatTranscript } from './asr/transcript';
 import { isKnownAudio } from './asr/audio';
 import { sendMessageCore } from './messages';
 import { parsePayload } from './lib/dto';
-import { dayInTimeZone } from './lib/time';
-import { refundQuota } from './quota';
+import { releaseQuota } from './quota';
 
 /** 同一条录音同一时刻只跑一个任务。 */
 const active = new Set<string>();
@@ -49,6 +49,20 @@ export function registerRecordingRoutes(app: FastifyInstance): void {
     },
     async (request, reply) => {
       const user = await requireUser(app, request);
+      const uploadKey = readIdempotencyKey(request);
+
+      if (uploadKey) {
+        const existing = app.db
+          .select()
+          .from(recordings)
+          .where(and(eq(recordings.userId, user.id), eq(recordings.uploadKey, uploadKey)))
+          .get();
+        if (existing) {
+          // 重传：不新建录音、不重新转写，直接回报既有记录的当前状态。
+          request.raw.resume();
+          return reply.code(202).send(toRecordingDto(existing));
+        }
+      }
 
       let file;
       try {
@@ -101,6 +115,7 @@ export function registerRecordingRoutes(app: FastifyInstance): void {
         userId: user.id,
         deviceId: null,
         status: 'transcribing',
+        uploadKey: uploadKey ?? null,
         mimeType: file.mimetype || 'application/octet-stream',
         sizeBytes: audio.length,
         durationMs: durationMs ?? null,
@@ -174,6 +189,17 @@ function getOwnedRecording(app: FastifyInstance, userId: string, recordingId: st
     .get();
   if (!row) throw notFound('Recording not found');
   return row;
+}
+
+/** 读 `Idempotency-Key`。缺失返回 undefined；格式不对按 400 拒绝，不静默忽略。 */
+function readIdempotencyKey(request: FastifyRequest): string | undefined {
+  const raw = request.headers['idempotency-key'];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === undefined || value === '') return undefined;
+  if (value.length < 8 || value.length > 64) {
+    throw invalidInput('Idempotency-Key must be 8 to 64 characters');
+  }
+  return value;
 }
 
 function parseDuration(fields: Record<string, unknown>): number | undefined {
@@ -436,12 +462,17 @@ export async function recoverRecordings(app: FastifyInstance): Promise<void> {
     let keepThreadId = threadId;
     if (threadId) {
       if (recordingMessage) {
-        refundQuota(
-          app.db,
-          row.userId,
-          dayInTimeZone(new Date(recordingMessage.createdAt), app.config.quotaTimezone),
-          now,
-        );
+        const event = app.db
+          .select()
+          .from(usageEvents)
+          .where(
+            and(
+              eq(usageEvents.userId, row.userId),
+              eq(usageEvents.idempotencyKey, clientMessageIdFor(row.id)),
+            ),
+          )
+          .get();
+        if (event) releaseQuota(app.db, event.id, 'stale', now);
         app.db.delete(messages).where(eq(messages.userMessageId, recordingMessage.id)).run();
         app.db.delete(messages).where(eq(messages.id, recordingMessage.id)).run();
       }

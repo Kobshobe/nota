@@ -113,6 +113,30 @@ export const usageDaily = sqliteTable(
   (table) => [uniqueIndex('usage_daily_user_day').on(table.userId, table.day)],
 );
 
+/** 每一次额度变化的账本行；`usage_daily.used` 是它的物化计数。 */
+export const usageEvents = sqliteTable(
+  'usage_events',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    day: text('day').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    state: text('state', { enum: ['reserved', 'committed', 'released'] }).notNull(),
+    reason: text('reason', { enum: ['message', 'recording'] }).notNull(),
+    releaseReason: text('release_reason', { enum: ['failed', 'no_output', 'stale'] }),
+    refId: text('ref_id'),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (table) => [
+    uniqueIndex('usage_events_user_key').on(table.userId, table.idempotencyKey),
+    index('usage_events_user_day').on(table.userId, table.day),
+    index('usage_events_state').on(table.state),
+  ],
+);
+
 export const recordings = sqliteTable(
   'recordings',
   {
@@ -122,6 +146,7 @@ export const recordings = sqliteTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     deviceId: text('device_id').references(() => devices.id, { onDelete: 'cascade' }),
     status: text('status', { enum: ['transcribing', 'completed', 'failed'] }).notNull(),
+    uploadKey: text('upload_key'),
     mimeType: text('mime_type').notNull(),
     sizeBytes: integer('size_bytes').notNull(),
     durationMs: integer('duration_ms'),
@@ -138,6 +163,9 @@ export const recordings = sqliteTable(
   (table) => [
     index('recordings_user_created_idx').on(table.userId, table.createdAt),
     index('recordings_status_idx').on(table.status),
+    uniqueIndex('recordings_user_upload_key')
+      .on(table.userId, table.uploadKey)
+      .where(sql`${table.uploadKey} is not null`),
   ],
 );
 
@@ -162,5 +190,6 @@ export type MessageRow = typeof messages.$inferSelect;
 export type ItemRow = typeof items.$inferSelect;
 export type ToolCallRow = typeof toolCalls.$inferSelect;
 export type UsageDailyRow = typeof usageDaily.$inferSelect;
+export type UsageEventRow = typeof usageEvents.$inferSelect;
 export type RecordingRow = typeof recordings.$inferSelect;
 export type DeviceRow = typeof devices.$inferSelect;

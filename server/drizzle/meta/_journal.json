@@ -43,6 +43,13 @@
       "when": 1794149057340,
       "tag": "0005_device-recordings",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794213484703,
+      "tag": "0006_usage-ledger",
+      "breakpoints": true
     }
   ]
 }

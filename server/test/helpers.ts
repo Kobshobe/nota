@@ -30,6 +30,7 @@ export interface TestContext {
 }
 
 export interface TestAppOptions {
+  demoStuckPrefix?: string;
   dailyLimit?: number;
   apiKey?: string | null;
   now?: Date;
@@ -66,6 +67,8 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<TestC
     jwtExpiresIn: '7d',
     dailyLimit: options.dailyLimit ?? 10,
     quotaTimezone: 'Asia/Shanghai',
+    quotaReserveTtlMinutes: 2,
+    demoStuckPrefix: options.demoStuckPrefix,
     deepseekApiKey: options.apiKey === null ? undefined : (options.apiKey ?? 'test-deepseek-key'),
     deepseekBaseUrl: 'https://api.deepseek.com',
     deepseekModel: 'deepseek-flash',

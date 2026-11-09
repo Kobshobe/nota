@@ -9,7 +9,7 @@ PORT ?= 8080
 export PUB_CACHE := $(CURDIR)/.cache/pub
 export FLUTTER_SUPPRESS_ANALYTICS := true
 
-.PHONY: deps check check-all check-server check-app docs breaking contract test test-fast e2e smoke-ios baseline
+.PHONY: deps check check-all check-server check-app docs breaking contract test test-fast e2e smoke-ios baseline reconcile
 
 ## 首次使用：只装门禁脚本自己用的依赖
 deps:
@@ -58,6 +58,10 @@ e2e:
 ## iOS 冒烟：模拟器上装包 + 真实登录，不消耗 AI 额度
 smoke-ios:
 	bash scripts/smoke-ios.sh
+
+## 对账：扣费数、账本、成功产出是否一致
+reconcile:
+	node $(SERVER_DIR)/scripts/reconcile-usage.mjs
 
 ## 发布时把当前契约冻结为新的比对基线
 baseline:

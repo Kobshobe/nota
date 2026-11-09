@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { afterEach, describe, expect, it } from 'vitest';
 import { messages, recordings, threads, users } from '../src/db/schema';
-import { chargeQuota } from '../src/quota';
+import { reserveQuota } from '../src/quota';
 import { recoverRecordings } from '../src/recordings';
 import {
   call,
@@ -282,6 +282,7 @@ describe('场景：设备会议录音 → 纪要', () => {
         userId: device.userId,
         deviceId: device.id,
         status: 'transcribing',
+        uploadKey: null,
         mimeType: 'audio/mpeg',
         sizeBytes: 10,
         durationMs: 1000,
@@ -309,10 +310,13 @@ describe('场景：设备会议录音 → 纪要', () => {
     const owner = ctx.app.db.select().from(users).where(eq(users.email, auth.user.email)).get();
     if (!owner) throw new Error('user missing');
     const now = ctx.currentNow.toISOString();
-    chargeQuota(ctx.app.db, owner, ctx.app.config, ctx.currentNow);
-
     const threadId = randomUUID();
     const recordingId = randomUUID();
+    reserveQuota(ctx.app.db, owner, ctx.app.config, ctx.currentNow, {
+      idempotencyKey: `rec:${recordingId}`,
+      reason: 'recording',
+      refId: recordingId,
+    });
     ctx.app.db
       .insert(threads)
       .values({
@@ -331,6 +335,7 @@ describe('场景：设备会议录音 → 纪要', () => {
         userId: owner.id,
         deviceId: device.id,
         status: 'transcribing',
+        uploadKey: null,
         mimeType: 'audio/mpeg',
         sizeBytes: 10,
         durationMs: 1000,
@@ -399,6 +404,7 @@ describe('场景：设备会议录音 → 纪要', () => {
         userId: owner.id,
         deviceId: device.id,
         status: 'transcribing',
+        uploadKey: null,
         mimeType: 'audio/mpeg',
         sizeBytes: 10,
         durationMs: 1000,

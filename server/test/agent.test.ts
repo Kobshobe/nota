@@ -274,7 +274,7 @@ describe('场景：Agent · 没有 finish 时整体回滚', () => {
     });
     expect(thread.body.messages).toHaveLength(0);
 
-    // when：同 key 重试，这次正常 finish
+    // when：同 key 重试，这次正常 finish 且有产出
     ctx.faux.setResponses([finishOnly({ reply: '好的' })]);
     const retried = await sendMessage(ctx, auth.token, '记一下不会存在', { clientMessageId });
 

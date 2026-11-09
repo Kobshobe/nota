@@ -297,10 +297,14 @@ abstract class NotaApi {
 
   Future<Usage> getUsage();
 
+  /// 查最近一条可疑扣费，用于排查"没成功却被扣了"。
+  Future<ChargeCheck> checkChargeAnomaly();
+
   Future<Recording> uploadRecording({
     required List<int> bytes,
     required String filename,
     required Duration duration,
+    required String idempotencyKey,
     void Function(int sent, int total)? onProgress,
   });
 
@@ -503,15 +507,26 @@ class ApiClient implements NotaApi {
   }
 
   @override
+  Future<ChargeCheck> checkChargeAnomaly() {
+    return _request(
+      () => _dio.get<dynamic>('/api/usage/last-anomaly'),
+      (data) => ChargeCheck.fromJson(data as Map<String, dynamic>),
+    );
+  }
+
+  @override
   Future<Recording> uploadRecording({
     required List<int> bytes,
     required String filename,
     required Duration duration,
+    required String idempotencyKey,
     void Function(int sent, int total)? onProgress,
   }) {
     return _request(
       () => _dio.post<dynamic>(
         '/api/recordings',
+        // 重传复用同一个键，服务端只建一条录音、只扣一次额度。
+        options: Options(headers: {'Idempotency-Key': idempotencyKey}),
         data: FormData.fromMap({
           'durationMs': duration.inMilliseconds.toString(),
           'audio': MultipartFile.fromBytes(bytes, filename: filename),

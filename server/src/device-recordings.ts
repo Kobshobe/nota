@@ -80,6 +80,7 @@ export function registerDeviceRecordingRoutes(app: FastifyInstance): void {
         userId: auth.user.id,
         deviceId: auth.device.id,
         status: 'transcribing',
+        uploadKey: null,
         mimeType,
         sizeBytes: audio.length,
         durationMs: durationMs ?? null,

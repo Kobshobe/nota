@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/api.dart';
 import '../../core/auth_store.dart';
 import '../../core/theme.dart';
+import '../../shared/widgets/app_snack_bar.dart';
 import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/section_card.dart';
 import '../chat/models.dart';
@@ -26,6 +28,36 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (!mounted) return;
       if (ref.read(usageProvider).hasValue) ref.invalidate(usageProvider);
     });
+  }
+
+  bool _checkingCharge = false;
+
+  /// 演示与排查入口：问后端最近一条可疑扣费是什么情况。
+  Future<void> _checkChargeAnomaly() async {
+    if (_checkingCharge) return;
+    setState(() => _checkingCharge = true);
+    try {
+      final check = await ref.read(apiProvider).checkChargeAnomaly();
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('误扣费检测'),
+          content: Text(check.message, key: const ValueKey('charge-check-message')),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      AppSnackBar.show(context, error.userMessage, isError: true);
+    } finally {
+      if (mounted) setState(() => _checkingCharge = false);
+    }
   }
 
   Future<void> _logout() async {
@@ -140,6 +172,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  key: const ValueKey('profile-check-charge'),
+                  onPressed: _checkingCharge ? null : _checkChargeAnomaly,
+                  icon: const Icon(Icons.rule_folder_outlined, size: 18),
+                  label: const Text('检测误扣费'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.ink,
+                    side: const BorderSide(color: AppColors.border),
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
                   key: const ValueKey('profile-logout'),
                   onPressed: _logout,

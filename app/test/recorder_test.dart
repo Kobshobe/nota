@@ -173,6 +173,10 @@ void main() {
     // then：重新上传，但没有再次录音
     expect(api.uploadCalls, 2);
     expect(recorder.stopCalls, 1);
+
+    // then：两次上传复用同一个幂等键，服务端只会建一条录音、只扣一次
+    expect(api.uploadKeys, hasLength(2));
+    expect(api.uploadKeys.first, api.uploadKeys.last);
   });
 
   testWidgets('场景：会议录音 · 满 8 分钟自动结束', (tester) async {

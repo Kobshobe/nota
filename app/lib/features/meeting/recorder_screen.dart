@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -37,6 +38,8 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
   /// 上传失败时保留本地录音，重试只需要重新上传，不必重录。
   Uint8List? _pendingBytes;
   String? _pendingPath;
+  /// 一段录音的上传幂等键：重试复用同一个，成功后才丢弃。
+  String? _pendingUploadKey;
   String? _failureCode;
   String? _failureMessage;
   bool _busy = false;
@@ -44,6 +47,12 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
 
   Timer? _ticker;
   StreamSubscription<RecordingLevel>? _levelSub;
+  static final Random _random = Random();
+
+  /// 一段录音一个键；重传必须复用，服务端靠它识别"同一次上传"。
+  String _newUploadKey() {
+    return 'r_${DateTime.now().microsecondsSinceEpoch}_${_random.nextInt(1 << 20)}';
+  }
 
   @override
   void initState() {
@@ -205,6 +214,7 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
       }
       _pendingPath = path;
       _pendingBytes = bytes;
+      _pendingUploadKey ??= _newUploadKey();
       await _uploadAndPoll(generation);
     } on ApiException catch (error) {
       if (mounted && generation == _generation) {
@@ -230,6 +240,7 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
   /// 上传 + 轮询。失败时保留 `_pendingBytes`，重试只重传不重录。
   Future<void> _uploadAndPoll(int generation) async {
     final bytes = _pendingBytes;
+    final idempotencyKey = _pendingUploadKey ??= _newUploadKey();
     if (bytes == null) return;
     setState(() {
       _phase = _Phase.uploading;
@@ -243,6 +254,7 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
         bytes: bytes,
         filename: kIsWeb ? 'meeting.webm' : 'meeting.m4a',
         duration: _elapsed,
+        idempotencyKey: idempotencyKey,
         onProgress: (sent, total) {
           if (mounted && total > 0) {
             setState(() => _uploadProgress = sent / total);
@@ -252,6 +264,7 @@ class _MeetingRecorderScreenState extends ConsumerState<MeetingRecorderScreen>
       final path = _pendingPath;
       _pendingPath = null;
       _pendingBytes = null;
+      _pendingUploadKey = null;
       if (path != null) unawaited(discardRecording(path));
       if (!mounted || generation != _generation) return;
       setState(() {

@@ -214,15 +214,19 @@ class FakeApi implements NotaApi {
   int failUploadTimes = 0;
   List<int>? lastUploadBytes;
   Duration? lastUploadDuration;
+  /// 每次上传带的幂等键，用来断言重传复用了同一个。
+  final List<String> uploadKeys = [];
 
   @override
   Future<Recording> uploadRecording({
     required List<int> bytes,
     required String filename,
     required Duration duration,
+    required String idempotencyKey,
     void Function(int sent, int total)? onProgress,
   }) async {
     uploadCalls += 1;
+    uploadKeys.add(idempotencyKey);
     if (failUploadTimes > 0) {
       failUploadTimes -= 1;
       throw const ApiException(
@@ -360,6 +364,19 @@ class FakeApi implements NotaApi {
   Future<Usage> getUsage() async {
     if (usageError != null) throw usageError!;
     return usage;
+  }
+
+  /// 误扣费自查要回的答案，以及被调用了几次。
+  int chargeCheckCalls = 0;
+  ChargeCheck chargeCheck = const ChargeCheck(
+    state: 'none',
+    message: '没有发现可疑的扣费记录，最近的整理都正常计费。',
+  );
+
+  @override
+  Future<ChargeCheck> checkChargeAnomaly() async {
+    chargeCheckCalls += 1;
+    return chargeCheck;
   }
 }
 

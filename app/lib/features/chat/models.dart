@@ -373,3 +373,16 @@ class SendMessageResult {
     'usage': usage.toJson(),
   };
 }
+
+/// 单条消息的扣费状态，用于排查"失败了但好像被扣费"。
+class ChargeCheck {
+  const ChargeCheck({required this.state, required this.message});
+
+  factory ChargeCheck.fromJson(Map<String, dynamic> json) => ChargeCheck(
+    state: json['state'] as String,
+    message: json['message'] as String,
+  );
+
+  final String state;
+  final String message;
+}
