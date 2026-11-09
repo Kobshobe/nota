@@ -81,13 +81,14 @@ state: idle
 改台词或换声音后：
 
 ```sh
-mmx speech synthesize --text "报价再降两千。" \
-  --voice male-qn-jingying --format mp3 --sample-rate 16000 --bitrate 32000 --out .tmp/meeting/1.mp3
-mmx speech synthesize --text "周四下午联调。" \
-  --voice female-yujie --format mp3 --sample-rate 16000 --bitrate 32000 --out .tmp/meeting/2.mp3
+mmx speech synthesize --text "首页改版这版就定了，报价单按降两千给客户，周四之前发出去。" \
+  --voice male-qn-jingying --pitch -2 --speed 0.96 \
+  --format mp3 --sample-rate 16000 --bitrate 32000 --out .tmp/meeting/1.mp3
+mmx speech synthesize --text "收到，原型明天下午给设计，联调放到周四上午，纪要我来整理。" \
+  --voice female-shaonv --format mp3 --sample-rate 16000 --bitrate 32000 --out .tmp/meeting/2.mp3
 ffmpeg -y -i .tmp/meeting/1.mp3 -i .tmp/meeting/2.mp3 \
-  -filter_complex "[0:a][1:a]concat=n=2:v=0:a=1[out]" -map "[out]" \
-  -ar 16000 -ac 1 -b:a 32k device/fixtures/meeting-01.mp3
+  -filter_complex "[0:a]aresample=16000,apad=pad_dur=0.8[a0];[a0][1:a]concat=n=2:v=0:a=1[out]" \
+  -map "[out]" -ar 16000 -ac 1 -b:a 32k device/fixtures/meeting-01.mp3
 node device/tools/embed-fixture.mjs
 ```
 
@@ -101,7 +102,7 @@ node device/tools/embed-fixture.mjs
 - **Wokwi 免费项目是公开的**：token 只从串口注入，不要写进 sketch。
 - **免费版走公共网关**：Wokwi 官方说明公共网关会监控流量；token 和音频内容也会经过它，不要放真实敏感数据。
 - **隧道域名会变**：每次重启 cloudflared 都要重新粘贴地址；Wokwi 连不上 Cloudflare 时可以用 `npx localtunnel --port 8080` 换一个域名；`http://` 地址只用于模拟器，token 会明文传输。
-- **单场会议上限**：480 秒 / 12 MB；模拟器 fixture 约 3 秒，不会触发上限。
+- **单场会议上限**：480 秒 / 12 MB；模拟器 fixture 约 13 秒，不会触发上限。
 
 ## 排查
 
