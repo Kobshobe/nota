@@ -19,7 +19,7 @@ export interface ToolCallDto {
 
 export interface MessageDto {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   payload?: MessagePayload;
   toolCalls?: ToolCallDto[];
@@ -122,6 +122,7 @@ export function parsePayload(json: string | null): MessagePayload | undefined {
     });
   }
   if (typeof raw.reply === 'string') payload.reply = raw.reply;
+  if (typeof raw.meetingThreadId === 'string') payload.meetingThreadId = raw.meetingThreadId;
   return Object.keys(payload).length > 0 ? payload : undefined;
 }
 

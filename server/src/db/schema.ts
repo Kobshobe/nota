@@ -36,7 +36,7 @@ export const messages = sqliteTable(
     threadId: text('thread_id')
       .notNull()
       .references(() => threads.id, { onDelete: 'cascade' }),
-    role: text('role', { enum: ['user', 'assistant'] }).notNull(),
+    role: text('role', { enum: ['user', 'assistant', 'system'] }).notNull(),
     content: text('content').notNull(),
     payloadJson: text('payload_json'),
     clientMessageId: text('client_message_id'),

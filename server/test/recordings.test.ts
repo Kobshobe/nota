@@ -123,6 +123,18 @@ describe('场景：会议录音 → 纪要', () => {
 
     // 音频转写成功后立即删除。
     expect(readdirSync(ctx.config.recordingsPath)).toEqual([]);
+
+    // App 自己录的会议不写设备通知。
+    const threads = await call(ctx, { method: 'GET', url: '/api/threads', token: auth.token });
+    const daily = threads.body.threads.find((thread: { kind: string }) => thread.kind === 'daily');
+    const dailyDetail = await call(ctx, {
+      method: 'GET',
+      url: `/api/threads/${daily.id}`,
+      token: auth.token,
+    });
+    expect(
+      dailyDetail.body.messages.filter((message: { role: string }) => message.role === 'system'),
+    ).toHaveLength(0);
   });
 
   it('同一条录音重跑不会建第二场会，也不重复扣额度', async () => {

@@ -130,6 +130,18 @@ describe('场景：设备会议录音 → 纪要', () => {
     const usage = await call(ctx, { method: 'GET', url: '/api/usage', token: auth.token });
     expect(usage.body.used).toBe(1);
     expect(readdirSync(ctx.config.recordingsPath)).toEqual([]);
+
+    const threads = await call(ctx, { method: 'GET', url: '/api/threads', token: auth.token });
+    const daily = threads.body.threads.find((thread: { kind: string }) => thread.kind === 'daily');
+    const dailyDetail = await call(ctx, {
+      method: 'GET',
+      url: `/api/threads/${daily.id}`,
+      token: auth.token,
+    });
+    const notice = dailyDetail.body.messages.at(-1);
+    expect(notice.role).toBe('system');
+    expect(notice.content).toBe('设备录音已整理成会议：产品周会：报价与联调排期');
+    expect(notice.payload.meetingThreadId).toBe(done.threadId);
   });
 
   it('设备读不到别的设备创建的录音', async () => {

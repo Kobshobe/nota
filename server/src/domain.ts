@@ -29,6 +29,7 @@ export interface MessagePayload {
   keyPoints?: string[];
   actions?: CandidateAction[];
   reply?: string;
+  meetingThreadId?: string;
 }
 
 export interface ToolTrace {

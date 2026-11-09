@@ -3,7 +3,7 @@ import { mkdir, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { and, eq, lt, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
-import { requireUser } from './auth';
+import { ensureDailyThread, requireUser } from './auth';
 import {
   messages,
   recordings,
@@ -24,6 +24,7 @@ import {
 import { formatTranscript } from './asr/transcript';
 import { isKnownAudio } from './asr/audio';
 import { sendMessageCore } from './messages';
+import { parsePayload } from './lib/dto';
 import { dayInTimeZone } from './lib/time';
 import { refundQuota } from './quota';
 
@@ -264,6 +265,18 @@ async function runRecording(app: FastifyInstance, recordingId: string): Promise<
       { recordingId: row.id, threadId: thread.id, speakers: transcript.speakerCount ?? 0 },
       'recording completed',
     );
+
+    // 设备在别处录音，App 这边可能没打开：在拥有者的日常对话里留一条能点进会议的通知。
+    if (row.deviceId) {
+      try {
+        notifyDeviceMinutesReady(app, row.userId, thread.id);
+      } catch (error) {
+        app.log.warn(
+          { recordingId: row.id, threadId: thread.id, error: error instanceof Error ? error.message : 'unknown' },
+          'device meeting notice could not be written',
+        );
+      }
+    }
   } catch (error) {
     const errorCode =
       error instanceof AppError && error.code === 'QUOTA_EXCEEDED'
@@ -307,6 +320,45 @@ async function runRecording(app: FastifyInstance, recordingId: string): Promise<
       'recording failed',
     );
   }
+}
+
+/**
+ * 设备会议整理完成后，在拥有者的日常对话里写一条 system 消息。
+ * 同一条会议只写一次；通知失败不应该影响已经完成的会议。
+ */
+function notifyDeviceMinutesReady(
+  app: FastifyInstance,
+  userId: string,
+  meetingThreadId: string,
+): void {
+  const now = app.now();
+  const timestamp = now.toISOString();
+  const meeting = app.db.select().from(threads).where(eq(threads.id, meetingThreadId)).get();
+  if (!meeting) return;
+  const daily = ensureDailyThread(app.db, userId, now);
+  const alreadyNotified = app.db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.threadId, daily.id), eq(messages.role, 'system')))
+    .all()
+    .some((message) => parsePayload(message.payloadJson)?.meetingThreadId === meetingThreadId);
+  if (alreadyNotified) return;
+  app.db.transaction((tx) => {
+    tx.insert(messages)
+      .values({
+        id: randomUUID(),
+        threadId: daily.id,
+        role: 'system',
+        content: `设备录音已整理成会议：${meeting.title}`,
+        payloadJson: JSON.stringify({ meetingThreadId }),
+        clientMessageId: null,
+        userMessageId: null,
+        responseJson: null,
+        createdAt: timestamp,
+      })
+      .run();
+    tx.update(threads).set({ updatedAt: timestamp }).where(eq(threads.id, daily.id)).run();
+  });
 }
 
 /** 会议创建与录音的 threadId 写在同一个事务里：重试只会复用，不会建第二场会。 */

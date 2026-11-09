@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nota API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Nota MVP：文字输入 → 摘要、重点、候选待办，并由 Agent 创建、修改、删除事项。
 
@@ -638,7 +638,8 @@ components:
           type: string
         role:
           type: string
-          enum: [user, assistant]
+          enum: [user, assistant, system]
+          description: system 由服务端写入，例如设备会议整理完成的通知
         content:
           type: string
         payload:
@@ -669,6 +670,9 @@ components:
             $ref: '#/components/schemas/CandidateAction'
         reply:
           type: string
+        meetingThreadId:
+          type: string
+          description: system 消息引用的会议 thread
     CandidateAction:
       type: object
       additionalProperties: false

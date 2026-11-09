@@ -54,11 +54,13 @@ class NotaThread {
 
 enum MessageRole {
   user,
-  assistant;
+  assistant,
+  system;
 
   static MessageRole fromWire(String value) => switch (value) {
     'user' => MessageRole.user,
     'assistant' => MessageRole.assistant,
+    'system' => MessageRole.system,
     _ => throw FormatException('Unknown message role: $value'),
   };
 
@@ -138,6 +140,7 @@ class MessagePayload {
     this.keyPoints = const [],
     this.actions = const [],
     this.reply,
+    this.meetingThreadId,
   });
 
   factory MessagePayload.fromJson(Map<String, dynamic> json) {
@@ -158,6 +161,7 @@ class MessagePayload {
               .toList() ??
           const [],
       reply: json['reply'] as String?,
+      meetingThreadId: json['meetingThreadId'] as String?,
     );
   }
 
@@ -166,6 +170,7 @@ class MessagePayload {
   final List<String> keyPoints;
   final List<CandidateAction> actions;
   final String? reply;
+  final String? meetingThreadId;
 
   Map<String, dynamic> toJson() => {
     if (title != null) 'title': title,
@@ -174,6 +179,7 @@ class MessagePayload {
     if (actions.isNotEmpty)
       'actions': actions.map((action) => action.toJson()).toList(),
     if (reply != null) 'reply': reply,
+    if (meetingThreadId != null) 'meetingThreadId': meetingThreadId,
   };
 }
 
